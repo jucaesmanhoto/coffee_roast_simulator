@@ -32,8 +32,8 @@ class RoastChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: true,
-            getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
-            getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
+            getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
+            getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
           ),
 
           // Títulos dos eixos
@@ -64,9 +64,10 @@ class RoastChart extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 35,
                 getTitlesWidget: (value, meta) {
-                  // Converte o valor da escala do eixo esquerdo para a escala do eixo direito
+                  // Converte o valor do eixo Y (0-230) para a escala do RoR (0-25)
                   final rorValue = value * (25 / 230);
-                  if (rorValue % 5 != 0) return const SizedBox(); // Mostra apenas múltiplos de 5
+                  // Mostra rótulos que correspondam a múltiplos de 5 na escala do RoR
+                  if (rorValue.round() % 5 != 0) return const SizedBox();
                   return Text(
                     rorValue.toInt().toString(),
                     style: const TextStyle(fontSize: 10, color: Colors.grey),
