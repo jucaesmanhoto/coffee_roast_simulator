@@ -1,0 +1,101 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+
+# IntelliJ
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code
+.vscode/
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+
+# Android
+/android/captures/
+/android/local.properties
+/android/.gradle/
+/android/app/src/main/assets/flutter_assets/
+
+# iOS
+/ios/Pods/
+/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+/ios/Flutter/App.framework
+/ios/Flutter/engine.version
+/ios/Flutter/flutter_assets/
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/info.plist
+/ios/Runner.xcworkspace/contents.xcworkspacedata
+/ios/Runner.xcworkspace/xcshareddata/
+/ios/Runner.xcodeproj/project.xcworkspace/
+/ios/Runner.xcodeproj/xcshareddata/
+/ios/Runner/GeneratedPluginRegistrant.*
+/ios/Runner/Info.plist
+/ios/Runner/GoogleService-Info.plist
+
+# Web
+/web/build/
+/web/dart_tool/
+/web/.dart_tool/
+
+# Windows
+/windows/flutter/ephemeral/
+/windows/flutter/generated_*.h
+/windows/flutter/generated_*.cc
+/windows/flutter/generated_plugin_registrant.cc
+/windows/flutter/generated_plugins.cmake
+/windows/app/GeneratedPluginRegistrant.cpp
+/windows/app/flutter/generated_plugins.cmake
+/windows/runner/Debug/
+/windows/runner/Release/
+/windows/runner/Profile/
+/windows/runner/flutter_window.pdb
+
+# Linux
+/linux/flutter/ephemeral/
+/linux/flutter/generated_*.h
+/linux/flutter/generated_*.cc
+/linux/flutter/generated_plugin_registrant.cc
+/linux/flutter/generated_plugins.cmake
+/linux/app/generated_plugin_registrant.cc
+/linux/app/flutter/generated_plugins.cmake
+/linux/my_application.so
+
+# macOS
+/macos/Flutter/ephemeral/
+/macos/Flutter/Generated/
+/macos/Flutter/GeneratedPluginRegistrant.swift
+/macos/Flutter/Flutter-Generated.xcconfig
+/macos/Pods/
+/macos/Runner/Assets.xcassets/AppIcon.appiconset/
+/macos/Runner/Configs/AppInfo.xcconfig
+/macos/Runner/Configs/Debug.xcconfig
+/macos/Runner/Configs/Release.xcconfig
+/macos/Runner/Configs/Warnings.xcconfig
+/macos/Runner/Debug/
+/macos/Runner/Release/
+/macos/Runner/Profile/
+/macos/Runner.xcworkspace/contents.xcworkspacedata
+/macos/Runner.xcworkspace/xcshareddata/
+/macos/Runner.xcodeproj/project.xcworkspace/
+/macos/Runner.xcodeproj/xcshareddata/
