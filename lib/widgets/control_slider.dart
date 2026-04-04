@@ -23,6 +23,7 @@ class ControlSlider extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+            SizedBox(width: 16),
             Text("${value.toInt()}%", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
           ],
         ),

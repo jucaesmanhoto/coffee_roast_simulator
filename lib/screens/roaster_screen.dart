@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons, RotatedBox;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../widgets/widgets.dart';
+import '../widgets/widgets.dart'; // Barrel file for widgets
 
 class RoasterScreen extends StatefulWidget {
   const RoasterScreen({super.key});
@@ -18,12 +18,14 @@ enum RoastState { idle, preheating, roasting }
 
 class _RoasterScreenState extends State<RoasterScreen> {
   // Parâmetros de Simulação
-  double beanTemp = 20.0;
-  double ambientTemp = 25.0;
+  double beanTemp = 120.0; // Temperatura do grão (BT)
+  double drumTemp = 120.0; // Temperatura do tambor (ou ambiente interno)
+  static const double ambientTemp = 20.0; // Temperatura ambiente fixa
+  static const double batchSizeGrams = 600.0; // Tamanho da batelada
   double heatInput = 0.0;
   double airFlow = 20.0;
   double ror = 0.0; // Rate of Rise
-  int seconds = 0; // Tempo de torra
+  int roastSeconds = 0; // Tempo de torra
   RoastState _roastState = RoastState.idle;
   Timer? _timer;
 
@@ -50,9 +52,10 @@ class _RoasterScreenState extends State<RoasterScreen> {
       rorPoints.clear();
       btPoints.add(const FlSpot(0, 20));
       rorPoints.add(const FlSpot(0, 0));
-      beanTemp = 20.0;
+      beanTemp = ambientTemp;
+      drumTemp = ambientTemp;
       ror = 0.0;
-      seconds = 0;
+      roastSeconds = 0;
       heatInput = 0.0;
       airFlow = 20.0;
       _roastState = RoastState.idle;
@@ -65,10 +68,21 @@ class _RoasterScreenState extends State<RoasterScreen> {
     });
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Durante o pré-aquecimento, a física ainda se aplica ao ambiente do torrador
-      // mas não afeta os grãos ou o tempo de torra.
-      if (_roastState == RoastState.roasting) {
-        _updatePhysics();
+      switch (_roastState) {
+        case RoastState.preheating:
+          _updateDrumPhysics();
+          break;
+        case RoastState.roasting:
+          _updateRoastPhysics();
+          break;
+        case RoastState.idle:
+          // Se o estado for ocioso, mas o tambor ainda estiver quente, simula o resfriamento.
+          if (drumTemp > ambientTemp) {
+            _updateDrumPhysics(coolingDown: true);
+          } else {
+            timer.cancel();
+          }
+          break;
       }
     });
   }
@@ -77,47 +91,76 @@ class _RoasterScreenState extends State<RoasterScreen> {
     setState(() {
       _roastState = RoastState.roasting;
       // Reseta o tempo e o gráfico para o início da torra
-      seconds = 0;
+      roastSeconds = 0;
       btPoints.clear();
       rorPoints.clear();
-      // Simulação do "Charge" (Grãos entram no tambor quente)
-      beanTemp = 185.0;
-      btPoints.add(FlSpot(0, beanTemp));
+
+      // Simulação do "Charge": a temperatura dos grãos se equaliza com a do tambor.
+      // Modelo simplificado de transferência de calor por massa.
+      const double drumMassKg = 2.0; // Massa térmica efetiva do tambor
+      const double batchSizeKg = batchSizeGrams / 1000.0;
+      final initialBeanTemp = (drumMassKg * drumTemp + batchSizeKg * ambientTemp) / (drumMassKg + batchSizeKg);
+
+      // O RoR inicial é fortemente negativo devido ao choque térmico.
+      // Este valor é empírico para criar a curva do "turning point".
+      ror = -80.0;
+      beanTemp = initialBeanTemp;
+
+      btPoints.add(FlSpot(0, initialBeanTemp));
       rorPoints.add(const FlSpot(0, 0));
     });
   }
 
   void _stopRoast() {
-    setState(() => _roastState = RoastState.idle);
+    setState(() {
+      _roastState = RoastState.idle;
+      // Não cancelamos o timer aqui para permitir o resfriamento do tambor.
+    });
   }
 
-  void _updatePhysics() {
+  void _updateRoastPhysics() {
     if (!mounted) return;
 
     setState(() {
-      seconds++;
+      roastSeconds++;
 
       // Lógica de Física do Kaleido M10
       // Fatores de aquecimento e arrefecimento calibrados
-      double heatEffect = (heatInput / 100) * 14.5;
-      double airCooling = (airFlow / 100) * 5.8;
-      double environmentalLoss = (beanTemp - ambientTemp) * 0.018;
+      double heatEffect = (heatInput / 100) * 15.0;
+      double airCooling = (airFlow / 100) * 6.0;
+      // A perda para o ambiente é mais significativa em temperaturas mais altas
+      double environmentalLoss = (beanTemp - ambientTemp) * 0.022;
 
       double targetRoR = heatEffect - airCooling - environmentalLoss;
 
-      // Inércia térmica (o tambor demora a responder às mudanças)
+      // Inércia térmica: o RoR se aproxima do RoR alvo gradualmente.
       ror = ror + (targetRoR - ror) * 0.12;
 
       // Atualização da temperatura (RoR é por minuto, dividimos por 60 para segundos)
       beanTemp += (ror / 60);
 
-      double timeInMinutes = seconds / 60;
+      // Atualiza a temperatura do tambor junto com a dos grãos
+      drumTemp = beanTemp * 1.05; // O tambor sempre um pouco mais quente que os grãos
+
+      double timeInMinutes = roastSeconds / 60;
       btPoints.add(FlSpot(timeInMinutes, beanTemp));
 
-      // RoR escalado para visibilidade no gráfico (fator de 5x)
-      rorPoints.add(FlSpot(timeInMinutes, ror * 5));
       // Adiciona o RoR real. A escala será feita no próprio gráfico.
       rorPoints.add(FlSpot(timeInMinutes, ror));
+    });
+  }
+
+  void _updateDrumPhysics({bool coolingDown = false}) {
+    if (!mounted) return;
+    setState(() {
+      double heatEffect = coolingDown ? 0 : (heatInput / 100) * 18.0; // Aquecimento mais rápido sem grãos
+      double airCooling = (airFlow / 100) * 6.5;
+      double environmentalLoss = (drumTemp - ambientTemp) * 0.02;
+
+      double delta = heatEffect - airCooling - environmentalLoss;
+
+      drumTemp += (delta / 60); // Aplica a mudança
+      if (drumTemp < ambientTemp) drumTemp = ambientTemp;
     });
   }
 
@@ -158,6 +201,9 @@ class _RoasterScreenState extends State<RoasterScreen> {
     }
   }
 
+  double get displayedRoR => ror < 0 ? 0 : ror;
+  double get displayedTemp => _roastState == RoastState.roasting ? beanTemp : drumTemp;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -175,28 +221,46 @@ class _RoasterScreenState extends State<RoasterScreen> {
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              RoastChart(btPoints: btPoints, rorPoints: rorPoints),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  DataTile(label: "BT TEMP", value: "${beanTemp.toStringAsFixed(1)}°C", color: Colors.orangeAccent),
-                  const SizedBox(width: 12),
-                  DataTile(label: "RoR", value: ror.toStringAsFixed(1), color: Colors.cyanAccent),
-                  const SizedBox(width: 12),
-                  DataTile(label: "TEMPO", value: _formatTime(seconds), color: Colors.white),
-                ],
+              // Coluna de Controles (Vertical)
+              SizedBox(
+                width: 100,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    const SizedBox(height: 60),
+                    RotatedBox(
+                      quarterTurns: 3, // Gira o slider para a vertical
+                      child: ControlSlider(label: "POTÊNCIA", value: heatInput, color: Colors.redAccent, onChanged: _roastState != RoastState.idle ? (v) => setState(() => heatInput = v) : null),
+                    ),
+                    const SizedBox(height: 40),
+                    RotatedBox(
+                      quarterTurns: 3,
+                      child: ControlSlider(label: "FLUXO DE AR", value: airFlow, color: Colors.blueAccent, onChanged: _roastState != RoastState.idle ? (v) => setState(() => airFlow = v) : null),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+              const SizedBox(width: 16),
+              // Coluna Principal (Gráfico e Dados)
+              Expanded(
                 child: Column(
                   children: [
-                    ControlSlider(label: "POTÊNCIA DE AQUECIMENTO", value: heatInput, color: Colors.redAccent, onChanged: _roastState != RoastState.idle ? (v) => setState(() => heatInput = v) : null),
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 10.0), child: Divider(height: 1, color: Colors.white10)),
-                    ControlSlider(label: "FLUXO DE AR (AIRFLOW)", value: airFlow, color: Colors.blueAccent, onChanged: _roastState != RoastState.idle ? (v) => setState(() => airFlow = v) : null),
+                    RoastChart(btPoints: btPoints, rorPoints: rorPoints),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        DataTile(label: "BT TEMP", value: "${displayedTemp.toStringAsFixed(1)}°C", color: Colors.orangeAccent),
+                        const SizedBox(width: 12),
+                        DataTile(label: "RoR", value: displayedRoR.toStringAsFixed(1), color: Colors.cyanAccent),
+                        const SizedBox(width: 12),
+                        DataTile(label: "TEMPO", value: _formatTime(roastSeconds), color: Colors.white),
+                        const SizedBox(width: 12),
+                        DataTile(label: "MASSA", value: "${batchSizeGrams.toInt()}g", color: Colors.grey),
+                      ],
+                    ),
                   ],
                 ),
               ),
