@@ -63,27 +63,17 @@ class _RoasterScreenState extends State<RoasterScreen> {
   }
 
   void _preheat() {
-    setState(() {
-      _roastState = RoastState.preheating;
-    });
+    // Se o timer principal não estiver ativo, inicia-o.
+    // Ele cuidará do resfriamento e da lógica da torra.
+    _timer ??= Timer.periodic(const Duration(seconds: 1), _updatePhysics);
 
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      switch (_roastState) {
-        case RoastState.preheating:
-          _updateDrumPhysics();
-          break;
-        case RoastState.roasting:
-          _updateRoastPhysics();
-          break;
-        case RoastState.idle:
-          // Se o estado for ocioso, mas o tambor ainda estiver quente, simula o resfriamento.
-          if (drumTemp > ambientTemp) {
-            _updateDrumPhysics(coolingDown: true);
-          } else {
-            timer.cancel();
-          }
-          break;
-      }
+    setState(() {
+      // Define o estado para pré-aquecido e a temperatura do tambor para 200°C.
+      _roastState = RoastState.preheating;
+      drumTemp = 200.0;
+      // Garante que os controles estejam ativos.
+      heatInput = 75.0; // Um valor inicial razoável para manter a temperatura.
+      airFlow = 25.0;
     });
   }
 
@@ -103,11 +93,11 @@ class _RoasterScreenState extends State<RoasterScreen> {
 
       // O RoR inicial é fortemente negativo devido ao choque térmico.
       // Este valor é empírico para criar a curva do "turning point".
-      ror = -80.0;
+      ror = -90.0; // Aumenta o RoR negativo inicial para um "mergulho" mais rápido
       beanTemp = initialBeanTemp;
 
       btPoints.add(FlSpot(0, initialBeanTemp));
-      rorPoints.add(const FlSpot(0, 0));
+      rorPoints.add(const FlSpot(0, 0)); // RoR no gráfico começa em 0
     });
   }
 
@@ -134,7 +124,7 @@ class _RoasterScreenState extends State<RoasterScreen> {
       double targetRoR = heatEffect - airCooling - environmentalLoss;
 
       // Inércia térmica: o RoR se aproxima do RoR alvo gradualmente.
-      ror = ror + (targetRoR - ror) * 0.12;
+      ror = ror + (targetRoR - ror) * 0.04; // Reduz a inércia para o RoR se recuperar mais lentamente
 
       // Atualização da temperatura (RoR é por minuto, dividimos por 60 para segundos)
       beanTemp += (ror / 60);
@@ -146,8 +136,28 @@ class _RoasterScreenState extends State<RoasterScreen> {
       btPoints.add(FlSpot(timeInMinutes, beanTemp));
 
       // Adiciona o RoR real. A escala será feita no próprio gráfico.
-      rorPoints.add(FlSpot(timeInMinutes, ror));
+      rorPoints.add(FlSpot(timeInMinutes, ror < 0 ? 0 : ror));
     });
+  }
+
+  void _updatePhysics(Timer timer) {
+    switch (_roastState) {
+      case RoastState.preheating:
+        // Mantém a temperatura do tambor estável durante o pré-aquecimento
+        _updateDrumPhysics();
+        break;
+      case RoastState.roasting:
+        _updateRoastPhysics();
+        break;
+      case RoastState.idle:
+        // Se o estado for ocioso, mas o tambor ainda estiver quente, simula o resfriamento.
+        if (drumTemp > ambientTemp) {
+          _updateDrumPhysics(coolingDown: true);
+        } else {
+          // O timer pode ser cancelado se não houver mais nada para simular.
+        }
+        break;
+    }
   }
 
   void _updateDrumPhysics({bool coolingDown = false}) {
@@ -159,6 +169,7 @@ class _RoasterScreenState extends State<RoasterScreen> {
 
       double delta = heatEffect - airCooling - environmentalLoss;
 
+      ror = delta; // Atualiza o RoR com a variação de temperatura do tambor
       drumTemp += (delta / 60); // Aplica a mudança
       if (drumTemp < ambientTemp) drumTemp = ambientTemp;
     });
