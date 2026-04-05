@@ -10,9 +10,9 @@ class Coffee {
   final double moisture; // percentual
 
   Coffee({
-    this.variety = 'Catuaí Vermelho',
-    this.region = 'Sul de Minas',
-    this.altitude = 1200,
+    this.variety = 'Catuaí Amarelo',
+    this.region = 'Região Vulcânica',
+    this.altitude = 1150,
     this.density = 0.7,
     this.moisture = 11.5,
   });

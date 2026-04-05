@@ -73,7 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newCoffee = Coffee(
       variety: _varietyController.text,
       region: _regionController.text,
-      altitude: int.tryParse(_altitudeController.text) ?? 1200,
+      altitude: int.tryParse(_altitudeController.text) ?? 1150,
       density: double.tryParse(_densityController.text) ?? 0.7,
       moisture: double.tryParse(_moistureController.text) ?? 11.5,
     );
@@ -81,11 +81,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newRoasterSettings = RoasterSettings(
       model: _selectedRoaster,
       batchSizeGrams: double.tryParse(_batchSizeController.text) ?? 600.0,
-      chargeTemp: double.tryParse(_chargeTempController.text) ?? 208.0,
-      initialHeat: double.tryParse(_initialHeatController.text) ?? 75.0,
+      chargeTemp: double.tryParse(_chargeTempController.text) ?? 206.0,
+      initialHeat: double.tryParse(_initialHeatController.text) ?? 95.0,
       initialAirflow: double.tryParse(_initialAirflowController.text) ?? 25.0,
-      initialDrumSpeed: double.tryParse(_initialDrumSpeedController.text) ?? 80.0,
-      timeScale: double.tryParse(_timeScaleController.text) ?? 1.0,
+      initialDrumSpeed: double.tryParse(_initialDrumSpeedController.text) ?? 70.0,
+      timeScale: double.tryParse(_timeScaleController.text) ?? 10.0,
     );
 
     Navigator.pop(context, {'coffee': newCoffee, 'roasterSettings': newRoasterSettings});
@@ -142,51 +142,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildCoffeeTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0).copyWith(bottom: 80),
-      child: Column(
-        children: [
-          _buildTextField(_varietyController, 'Variedade'),
-          _buildTextField(_regionController, 'Região'),
-          _buildTextField(_altitudeController, 'Altitude (m)', keyboardType: TextInputType.number),
-          _buildTextField(_densityController, 'Densidade (g/mL)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-          _buildTextField(_moistureController, 'Umidade (%)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-        ],
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0).copyWith(bottom: 80),
+          child: Column(
+            children: [
+              _buildTextField(_varietyController, 'Variedade'),
+              _buildTextField(_regionController, 'Região'),
+              _buildTextField(_altitudeController, 'Altitude (m)', keyboardType: TextInputType.number),
+              _buildTextField(_densityController, 'Densidade (g/mL)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+              _buildTextField(_moistureController, 'Umidade (%)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildRoasterTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0).copyWith(bottom: 80),
-      child: Column(
-        children: [
-          DropdownButtonFormField<String>(
-            value: _selectedRoaster,
-            items: ['Kaleido M10'].map((String value) {
-              return DropdownMenuItem<String>(value: value, child: Text(value));
-            }).toList(),
-            onChanged: (newValue) {
-              setState(() {
-                _selectedRoaster = newValue!;
-              });
-            },
-            decoration: InputDecoration(
-              labelText: 'Modelo do Torrador',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0).copyWith(bottom: 80),
+          child: Column(
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: _selectedRoaster,
+                items: ['Kaleido M10'].map((String value) {
+                  return DropdownMenuItem<String>(value: value, child: Text(value));
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    _selectedRoaster = newValue!;
+                  });
+                },
+                decoration: InputDecoration(
+                  labelText: 'Modelo do Torrador',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(_batchSizeController, 'Massa de Café (g)', keyboardType: TextInputType.number),
+              _buildTextField(_chargeTempController, 'Temperatura de Carga (°C)', keyboardType: TextInputType.number),
+              _buildTextField(_initialHeatController, 'Potência Inicial (%)', keyboardType: TextInputType.number),
+              _buildTextField(_initialAirflowController, 'Fluxo de Ar Inicial (%)', keyboardType: TextInputType.number),
+              _buildTextField(_initialDrumSpeedController, 'Rotação do Tambor Inicial (%)', keyboardType: TextInputType.number),
+              const Divider(height: 32),
+              Text('Configurações de Simulação', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _buildTextField(_timeScaleController, 'Aceleração do Tempo (ex: 10 para 10x)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildTextField(_batchSizeController, 'Massa de Café (g)', keyboardType: TextInputType.number),
-          _buildTextField(_chargeTempController, 'Temperatura de Carga (°C)', keyboardType: TextInputType.number),
-          _buildTextField(_initialHeatController, 'Potência Inicial (%)', keyboardType: TextInputType.number),
-          _buildTextField(_initialAirflowController, 'Fluxo de Ar Inicial (%)', keyboardType: TextInputType.number),
-          _buildTextField(_initialDrumSpeedController, 'Rotação do Tambor Inicial (%)', keyboardType: TextInputType.number),
-          const Divider(height: 32),
-          Text('Configurações de Simulação', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          _buildTextField(_timeScaleController, 'Aceleração do Tempo (ex: 10 para 10x)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-        ],
+        ),
       ),
     );
   }
