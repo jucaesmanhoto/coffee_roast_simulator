@@ -26,14 +26,14 @@ class RoastChart extends StatelessWidget {
           minX: 0,
           maxX: 16, // Limite de 16 minutos
           minY: 0,
-          maxY: 230, // Limite de 230°C para o eixo esquerdo (BT)
+          maxY: 250, // Limite de 250°C para o eixo esquerdo (BT)
 
           // Linhas de grade
           gridData: FlGridData(
             show: true,
             drawVerticalLine: true,
-            getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
-            getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
+            getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.15), strokeWidth: 1),
+            getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.15), strokeWidth: 1),
           ),
 
           // Títulos dos eixos
@@ -64,8 +64,8 @@ class RoastChart extends StatelessWidget {
                 showTitles: true,
                 reservedSize: 35,
                 getTitlesWidget: (value, meta) {
-                  // Converte o valor do eixo Y (0-230) para a escala do RoR (0-25)
-                  final rorValue = value * (25 / 230);
+                  // Converte o valor do eixo Y (0-250) para a escala do RoR (0-25)
+                  final rorValue = value * (25 / 250);
                   // Mostra rótulos que correspondam a múltiplos de 5 na escala do RoR
                   if (rorValue.round() % 5 != 0) return const SizedBox();
                   return Text(
@@ -91,8 +91,8 @@ class RoastChart extends StatelessWidget {
             ),
             // Linha de RoR
             LineChartBarData(
-              // Mapeia os valores do RoR para a escala do eixo Y principal (0-230)
-              spots: rorPoints.map((spot) => FlSpot(spot.x, spot.y * (230 / 25))).toList(),
+              // Mapeia os valores do RoR para a escala do eixo Y principal (0-250)
+              spots: rorPoints.map((spot) => FlSpot(spot.x, spot.y * (250 / 25))).toList(),
               isCurved: true,
               color: Colors.cyanAccent.withValues(alpha: 0.8),
               barWidth: 2,

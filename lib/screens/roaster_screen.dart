@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons, RotatedBox;
+import 'package:coffee_roast_simulator/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -15,7 +16,7 @@ class RoasterScreen extends StatefulWidget {
 }
 
 class _RoasterScreenState extends State<RoasterScreen> {
-  final RoastSimulatorService _simulator = RoastSimulatorService();
+  late RoastSimulatorService _simulator;
   Timer? _timer;
 
   @override
@@ -23,6 +24,7 @@ class _RoasterScreenState extends State<RoasterScreen> {
     super.initState();
     _resetSimulation();
   }
+
 
   @override
   void dispose() {
@@ -33,14 +35,14 @@ class _RoasterScreenState extends State<RoasterScreen> {
   void _resetSimulation() {
     _timer?.cancel();
     setState(() {
-      _simulator.resetSimulation();
+      _simulator = RoastSimulatorService();
     });
   }
 
   void _preheat() {
-    // Se o timer principal não estiver ativo, inicia-o.
-    // Ele cuidará do resfriamento e da lógica da torra.
-    _timer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+     // Cancela o timer antigo (se houver) e inicia um novo com a velocidade correta.
+    _timer?.cancel();
+    _timer = Timer.periodic(Duration(milliseconds: (1000 / _simulator.roasterSettings.timeScale).round()), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -66,6 +68,28 @@ class _RoasterScreenState extends State<RoasterScreen> {
       _simulator.stopRoast();
       // Não cancelamos o timer aqui para permitir o resfriamento do tambor.
     });
+  }
+
+  void _openSettings() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsScreen(
+          initialCoffee: _simulator.coffee,
+          initialRoasterSettings: _simulator.roasterSettings,
+        ),
+      ),
+    );
+
+    if (result != null && result is Map) {
+      _timer?.cancel();
+      setState(() {
+        _simulator = RoastSimulatorService(
+          coffee: result['coffee'],
+          roasterSettings: result['roasterSettings'],
+        );
+      });
+    }
   }
 
   String _formatTime(int sec) {
@@ -117,6 +141,10 @@ class _RoasterScreenState extends State<RoasterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings),
+          ),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(children: _buildAppBarActions()),
           )
@@ -162,7 +190,7 @@ class _RoasterScreenState extends State<RoasterScreen> {
                         const SizedBox(width: 12),
                         DataTile(label: "TEMPO", value: _formatTime(_simulator.roastSeconds), color: Colors.white),
                         const SizedBox(width: 12),
-                        DataTile(label: "MASSA", value: "${RoastSimulatorService.batchSizeGrams.toInt()}g", color: Colors.grey),
+                        DataTile(label: "MASSA", value: "${_simulator.roasterSettings.batchSizeGrams.toInt()}g", color: Colors.grey),
                       ],
                     ),
                   ],

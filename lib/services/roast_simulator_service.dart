@@ -1,14 +1,48 @@
-import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 
 enum RoastState { idle, preheating, roasting }
+
+class Coffee {
+  final String variety;
+  final String region;
+  final int altitude;
+  final double density; // g/mL
+  final double moisture; // percentual
+
+  Coffee({
+    this.variety = 'Catuaí Vermelho',
+    this.region = 'Sul de Minas',
+    this.altitude = 1200,
+    this.density = 0.7,
+    this.moisture = 11.5,
+  });
+}
+
+class RoasterSettings {
+  final String model;
+  final double batchSizeGrams;
+  final double chargeTemp;
+  final double initialHeat;
+  final double initialAirflow;
+  final double initialDrumSpeed;
+  final double timeScale; // Fator de aceleração do tempo
+
+  RoasterSettings({
+    this.model = 'Kaleido M10',
+    this.batchSizeGrams = 600.0,
+    this.chargeTemp = 208.0,
+    this.initialHeat = 75.0,
+    this.initialAirflow = 25.0,
+    this.initialDrumSpeed = 80.0,
+    this.timeScale = 1.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+  });
+}
 
 class RoastSimulatorService {
   // Parâmetros de Simulação
   double beanTemp = 20.0; // Temperatura do grão (BT)
   double drumTemp = 20.0; // Temperatura do tambor (ou ambiente interno)
   static const double ambientTemp = 20.0; // Temperatura ambiente fixa
-  static const double batchSizeGrams = 600.0; // Tamanho da batelada
   double heatInput = 0.0;
   double airFlow = 20.0;
   double ror = 0.0; // Rate of Rise
@@ -18,6 +52,12 @@ class RoastSimulatorService {
   // Dados do Gráfico
   final List<FlSpot> btPoints = [const FlSpot(0, 20)];
   final List<FlSpot> rorPoints = [const FlSpot(0, 0)];
+
+  // Modelos de configuração
+  Coffee coffee;
+  RoasterSettings roasterSettings;
+
+  RoastSimulatorService({Coffee? coffee, RoasterSettings? roasterSettings}) : coffee = coffee ?? Coffee(), roasterSettings = roasterSettings ?? RoasterSettings();
 
   void resetSimulation() {
     btPoints.clear();
@@ -37,13 +77,13 @@ class RoastSimulatorService {
     // Limpa os dados do gráfico de uma torra anterior
     btPoints.clear();
     rorPoints.clear();
-    btPoints.add(const FlSpot(0, 208)); // Começa o gráfico na temp de pre-aquecimento
+    btPoints.add(FlSpot(0, roasterSettings.chargeTemp)); // Começa o gráfico na temp de pre-aquecimento
     rorPoints.add(const FlSpot(0, 0));
 
     roastState = RoastState.preheating;
-    drumTemp = 208.0;
-    heatInput = 75.0;
-    airFlow = 25.0;
+    drumTemp = roasterSettings.chargeTemp;
+    heatInput = roasterSettings.initialHeat;
+    airFlow = roasterSettings.initialAirflow;
   }
 
   void chargeBeans() {
@@ -53,7 +93,7 @@ class RoastSimulatorService {
     rorPoints.clear();
 
     const double drumMassKg = 2.0;
-    const double batchSizeKg = batchSizeGrams / 1000.0;
+    final double batchSizeKg = roasterSettings.batchSizeGrams / 1000.0;
     final initialBeanTemp = (drumMassKg * drumTemp + batchSizeKg * ambientTemp) / (drumMassKg + batchSizeKg);
 
     ror = -90.0;
