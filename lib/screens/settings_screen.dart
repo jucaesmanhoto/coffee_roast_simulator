@@ -41,7 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _regionController = TextEditingController(text: widget.initialCoffee.region);
     _altitudeController = TextEditingController(text: widget.initialCoffee.altitude.toString());
     _densityController = TextEditingController(text: widget.initialCoffee.density.toString());
-    _moistureController = TextEditingController(text: widget.initialCoffee.moisture.toString());
+    _moistureController = TextEditingController(text: widget.initialCoffee.currentMoisture.toString());
 
     _batchSizeController = TextEditingController(text: widget.initialRoasterSettings.batchSizeGrams.toString());
     _chargeTempController = TextEditingController(text: widget.initialRoasterSettings.chargeTemp.toString());
@@ -75,7 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       region: _regionController.text,
       altitude: int.tryParse(_altitudeController.text) ?? 1150,
       density: double.tryParse(_densityController.text) ?? 0.7,
-      moisture: double.tryParse(_moistureController.text) ?? 11.5,
+      initialMoisture: double.tryParse(_moistureController.text) ?? 11.5,
     );
 
     final newRoasterSettings = RoasterSettings(
