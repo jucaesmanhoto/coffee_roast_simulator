@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
 
+import 'roast_phases/roast_phases.dart';
+
 enum RoastState { idle, preheating, roasting }
 enum RoastPhase { drying, maillard, development }
 
@@ -48,10 +50,10 @@ class RoasterSettings {
     this.model = 'Kaleido M10',
     this.batchSizeGrams = 600.0,
     this.chargeTemp = 208.0,
-    this.initialHeat = 95.0,
+    this.initialHeat = 75.0,
     this.initialAirflow = 25.0,
     this.initialDrumSpeed = 70.0,
-    this.timeScale = 10.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+    this.timeScale = 3.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
@@ -59,11 +61,17 @@ class RoasterSettings {
 }
 
 class RoastSimulatorService {
+  // --- Constantes das Fases da Torra ---
+  static const double dryingToEndTemp = 150.0; // Temp. final da fase de secagem
+  static const double maillardToEndTemp = 192.0; // Temp. final de Maillard (início do 1º crack)
+  static const double developmentEndTemp = 230.0; // Temp. máxima permitida para o grão
+
+
   // Parâmetros de Simulação
-  double beanTemp = 20.0; // Temperatura do grão (BT)
+  double beanTemp = 190.0; // Temperatura do grão (BT)
   double trueBeanCoreTemp = 20.0; // Temperatura interna REAL do grão
-  double drumTemp = 20.0; // Temperatura do tambor (ou ambiente interno)
-  double airTemp = 20.0; // Temperatura do ar dentro do torrador
+  double drumTemp = 190.0; // Temperatura do tambor (ou ambiente interno)
+  double airTemp = 190.0; // Temperatura do ar dentro do torrador
   static const double ambientTemp = 20.0; // Temperatura ambiente fixa
   double heatInput = 0.0;
   double airFlow = 20.0;
@@ -73,6 +81,11 @@ class RoastSimulatorService {
   double currentBatchMassGrams; // Massa atual do lote, diminui com a evaporação
   RoastPhase roastPhase = RoastPhase.drying;
   bool firstCrackHappened = false;
+  double? turningPointTemp;
+  int? turningPointTime;
+  bool turningPointDetected = false;
+  bool hasRorDropped = false; // Nova flag para a lógica do TP
+  double? chargeTempSnapshot;
 
   // Dados do Gráfico
   final List<FlSpot> btPoints = [const FlSpot(0, 20)];
@@ -82,10 +95,19 @@ class RoastSimulatorService {
   Coffee coffee;
   RoasterSettings roasterSettings;
 
+  // Estratégias de Fase
+  final Map<RoastPhase, RoastPhaseStrategy> _phaseStrategies;
+
   RoastSimulatorService({Coffee? coffee, RoasterSettings? roasterSettings})
       : coffee = coffee ?? Coffee(),
         roasterSettings = roasterSettings ?? RoasterSettings(),
-        currentBatchMassGrams = (roasterSettings ?? RoasterSettings()).batchSizeGrams;
+        currentBatchMassGrams = (roasterSettings ?? RoasterSettings()).batchSizeGrams,
+        _phaseStrategies = {
+          RoastPhase.drying: DryingPhaseStrategy(),
+          RoastPhase.maillard: MaillardPhaseStrategy(),
+          RoastPhase.development: DevelopmentPhaseStrategy(),
+        };
+
 
   void resetSimulation() {
     btPoints.clear();
@@ -105,17 +127,23 @@ class RoastSimulatorService {
     roastPhase = RoastPhase.drying;
     firstCrackHappened = false;
     currentBatchMassGrams = roasterSettings.batchSizeGrams;
+    turningPointTemp = null;
+    turningPointTime = null;
+    turningPointDetected = false;
+    hasRorDropped = false;
+    chargeTempSnapshot = null;
   }
 
   void preheat() {
     // Limpa os dados do gráfico de uma torra anterior
+    chargeTempSnapshot = null;
     btPoints.clear();
     rorPoints.clear();
-    btPoints.add(FlSpot(0, roasterSettings.chargeTemp)); // Começa o gráfico na temp de pre-aquecimento
     rorPoints.add(const FlSpot(0, 0));
 
     roastState = RoastState.preheating;
-    drumTemp = roasterSettings.chargeTemp;
+    // Apenas define o estado e os controles. A temperatura subirá gradualmente no updatePhysics.
+    // drumTemp e beanTemp começam em ambientTemp e sobem a partir daí.
     heatInput = roasterSettings.initialHeat;
     airFlow = roasterSettings.initialAirflow;
   }
@@ -126,13 +154,22 @@ class RoastSimulatorService {
     btPoints.clear();
     rorPoints.clear();
 
-    // A sonda (beanTemp) estava lendo a temperatura do tambor. Agora ela será resfriada pelos grãos.
+    // Sincroniza a sonda com a temperatura do tambor no momento da carga.
+    chargeTempSnapshot = beanTemp; // Captura a temperatura da sonda no momento da carga
+
+    // A sonda (beanTemp), que estava na temperatura de carga, agora será resfriada pelos grãos.
     // A temperatura interna real dos grãos (trueBeanCoreTemp) começa na temperatura ambiente.
     trueBeanCoreTemp = ambientTemp;
-    // A primeira leitura do gráfico é a temperatura da sonda no momento da carga.
+
+    // Adiciona o ponto inicial no gráfico: no tempo 0, a sonda ainda lê a temperatura de carga.
     btPoints.add(FlSpot(0, beanTemp));
+
     // O RoR inicial é drasticamente negativo.
     rorPoints.add(const FlSpot(0, 0));
+    turningPointTemp = null;
+    turningPointTime = null;
+    turningPointDetected = false;
+    hasRorDropped = false;
   }
 
   void stopRoast() {
@@ -166,84 +203,56 @@ class RoastSimulatorService {
 
     switch (roastState) {
       case RoastState.preheating:
-        // A física do tambor e do ar já foi calculada acima.
-        // O ROR aqui é o do tambor.
-        ror = drumTempDelta * 60;
+        // No pré-aquecimento, a sonda (BT) mede a temperatura do ar.
+        // A sonda tem sua própria inércia, então ela se aproxima da temp do ar gradualmente.
+        beanTemp += (airTemp - beanTemp) * 0.2; // Fator de inércia da sonda
         break;
 
       case RoastState.roasting:
+        // Após a carga, a sonda é resfriada pela massa de grãos, mas aquecida pelo ar.
+        // A temperatura da sonda (beanTemp) se move em direção a um equilíbrio entre a temp. do grão e do ar.
+        double targetProbeTemp = (trueBeanCoreTemp * 0.8) + (airTemp * 0.2); // 80% grão, 20% ar
+        double inertiaFactor = 0.05;
+        beanTemp += (targetProbeTemp - beanTemp) * inertiaFactor;
+
         roastSeconds++;
         double currentBatchMassKg = currentBatchMassGrams / 1000.0;
 
-        // --- BALANÇO DE ENERGIA NO GRÃO ---
-        // A física de transferência de calor usa a temperatura interna REAL do grão (trueBeanCoreTemp)
-
-        // 1. Determinar a Fase da Torra
-        if (trueBeanCoreTemp < 150) {
+        // 1. ATUALIZAR FASE DA TORRA E OBTER ESTRATÉGIA
+        if (trueBeanCoreTemp < dryingToEndTemp) {
           roastPhase = RoastPhase.drying;
-        } else if (trueBeanCoreTemp < 190) {
+        } else if (trueBeanCoreTemp < maillardToEndTemp) {
           roastPhase = RoastPhase.maillard;
         } else {
           roastPhase = RoastPhase.development;
         }
+        final strategy = _phaseStrategies[roastPhase]!;
 
-        // 2. Termo de Transferência de Calor (Condução + Convecção)
-        // O vapor expelido aumenta a turbulência e o coeficiente de convecção (h)
-        double vaporEffect = (roastPhase == RoastPhase.drying || firstCrackHappened) ? 1.5 : 1.0;
-        double hConvection = (0.7 + airFlow / 100) * vaporEffect; // Coeficiente de convecção
-        double hConduction = 0.9; // Coeficiente de condução
-        double qTransfer = hConduction * (drumTemp - trueBeanCoreTemp) + hConvection * (airTemp - trueBeanCoreTemp);
+        // 2. DELEGAR CÁLCULO DA FÍSICA PARA A ESTRATÉGIA ATUAL
+        final physicsResult = strategy.calculatePhysics(this);
 
-        // 3. Termo de Perda de Massa e Resfriamento Evaporativo (ρ*V*λ*(dX/dt))
-        const double latentHeatVaporization = 2260; // kJ/kg
-        double moistureLossRate = 0;
-        if (coffee.currentMoisture > 2.0) {
-          // A evaporação é mais intensa na fase de secagem
-          moistureLossRate = (roastPhase == RoastPhase.drying)
-              ? (trueBeanCoreTemp - 80) / 80000
-              : (trueBeanCoreTemp - 120) / 150000;
-          moistureLossRate = max(0, moistureLossRate);
+        // Detecção do Turning Point (ocorre na fase de secagem)
+        if (!hasRorDropped && ror < 0) {
+          hasRorDropped = true;
         }
-        double moistureMassLossKg = currentBatchMassKg * moistureLossRate;
-        double qEvaporativeCooling = moistureMassLossKg * latentHeatVaporization * 1000; // Convertendo para Joules
-
-        // Atualiza umidade e massa do café
-        coffee.currentMoisture -= moistureLossRate * 100;
-        currentBatchMassGrams -= moistureMassLossKg * 1000;
-
-        // 4. Termo de Geração de Calor Interno (ρ*V*Qr)
-        double qReaction = 0;
-        switch (roastPhase) {
-          case RoastPhase.drying:
-            qReaction = 0; // Reação puramente endotérmica
-            break;
-          case RoastPhase.maillard:
-            qReaction = 1000; // Geração de calor leve e constante (J/s)
-            break;
-          case RoastPhase.development:
-            // Simula o 1º Crack como um pulso de energia
-            if (trueBeanCoreTemp > 196 && !firstCrackHappened) {
-              qReaction = 232000 * currentBatchMassKg; // Pulso exotérmico de 232 kJ/kg
-              firstCrackHappened = true;
-            } else {
-              // Reações de pirólise contínuas após o crack
-              qReaction = 3000; // (J/s)
-            }
-            break;
+        if (!turningPointDetected && hasRorDropped && roastPhase == RoastPhase.drying && ror >= 0) {
+          turningPointDetected = true;
+          turningPointTemp = beanTemp;
+          turningPointTime = roastSeconds;
         }
 
-        // 5. Calcular a Variação da Temperatura do Grão (dT/dt)
+        // 3. CALCULAR VARIAÇÃO DA TEMPERATURA COM BASE NOS RESULTADOS DA ESTRATÉGIA
         double beanSpecificHeat = coffee.specificHeat;
-        // dT/dt = (q_transfer - q_evaporativeCooling + q_reaction) / (massa * Cp)
-        double netEnergyRate = qTransfer - qEvaporativeCooling + qReaction;
+        double netEnergyRate = physicsResult.qTransfer - physicsResult.qEvaporativeCooling + physicsResult.qReaction;
         double coreTempDelta = netEnergyRate / (currentBatchMassKg * beanSpecificHeat * 1000); // Cp está em kJ, convertendo
         trueBeanCoreTemp += coreTempDelta * timeStep;
 
-        // 6. Simular a leitura da sonda (beanTemp)
-        // A sonda se move em direção à temperatura interna real do grão.
-        beanTemp += (trueBeanCoreTemp - beanTemp) * 0.15; // O fator 0.15 controla a "inércia" da sonda.
+        // 4. GARANTIR LIMITE MÁXIMO DE TEMPERATURA
+        if (trueBeanCoreTemp > developmentEndTemp) {
+          trueBeanCoreTemp = developmentEndTemp;
+        }
 
-        // 7. Atualizar ROR e Gráficos (baseado na leitura da sonda)
+        // 6. ATUALIZAR ROR E GRÁFICOS (baseado na leitura da sonda)
         double newRor = (btPoints.isNotEmpty) ? (beanTemp - btPoints.last.y) * 60 / timeStep : 0;
         ror = ror * 0.95 + newRor * 0.05;
         double timeInMinutes = roastSeconds / 60.0;
@@ -256,10 +265,9 @@ class RoastSimulatorService {
           double coolingDrumDelta = (-drumHeatLoss) / (roasterSettings.drumMassKg * roasterSettings.drumSpecificHeat * 1000) * timeStep;
           drumTemp += coolingDrumDelta;
           airTemp = ambientTemp + (drumTemp - ambientTemp) * 0.5; // Ar acompanha o resfriamento do tambor
-          if (drumTemp < ambientTemp) drumTemp = ambientTemp;
-          if (beanTemp > ambientTemp) {
-            beanTemp -= (beanTemp - ambientTemp) * 0.01; // Resfriamento simples do grão
-          }
+          // A sonda também resfria em direção à temperatura do ar
+          beanTemp += (airTemp - beanTemp) * 0.1;
+          drumTemp = max(drumTemp, ambientTemp);
         }
         break;
     }

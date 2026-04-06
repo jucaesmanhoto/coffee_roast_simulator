@@ -65,8 +65,8 @@ class _RoasterScreenState extends State<RoasterScreen> {
 
   void _stopRoast() {
     setState(() {
+      _timer?.cancel(); // Para a simulação para "congelar" o estado.
       _simulator.stopRoast();
-      // Não cancelamos o timer aqui para permitir o resfriamento do tambor.
     });
   }
 
@@ -130,7 +130,8 @@ class _RoasterScreenState extends State<RoasterScreen> {
   }
 
   double get displayedRoR => _simulator.ror < 0 ? 0 : _simulator.ror;
-  double get displayedTemp => _simulator.roastState == RoastState.roasting ? _simulator.beanTemp : _simulator.drumTemp;
+  // O display deve sempre mostrar a temperatura da sonda (BT), que é a referência do mestre de torras.
+  double get displayedTemp => _simulator.beanTemp;
 
   @override
   Widget build(BuildContext context) {
@@ -181,16 +182,43 @@ class _RoasterScreenState extends State<RoasterScreen> {
                 child: Column(
                   children: [
                     RoastChart(btPoints: _simulator.btPoints, rorPoints: _simulator.rorPoints),
-                    const SizedBox(height: 20),
-                    Row(
+                    const SizedBox(height: 16),
+                    Column(
                       children: [
-                        DataTile(label: "BT TEMP", value: "${displayedTemp.toStringAsFixed(1)}°C", color: Colors.orangeAccent),
-                        const SizedBox(width: 12),
-                        DataTile(label: "RoR", value: displayedRoR.toStringAsFixed(1), color: Colors.cyanAccent),
-                        const SizedBox(width: 12),
-                        DataTile(label: "TEMPO", value: _formatTime(_simulator.roastSeconds), color: Colors.white),
-                        const SizedBox(width: 12),
-                        DataTile(label: "MASSA", value: "${_simulator.roasterSettings.batchSizeGrams.toInt()}g", color: Colors.grey),
+                        Row(
+                          children: [
+                            Expanded(child: DataTile(label: "BT TEMP", value: "${displayedTemp.toStringAsFixed(1)}°C", color: Colors.orangeAccent)),
+                            const SizedBox(width: 12),
+                            Expanded(child: DataTile(label: "RoR", value: displayedRoR.toStringAsFixed(1), color: Colors.cyanAccent)),
+                            const SizedBox(width: 12),
+                            Expanded(child: DataTile(label: "TEMPO", value: _formatTime(_simulator.roastSeconds), color: Colors.white)),
+                            const SizedBox(width: 12),
+                            Expanded(child: DataTile(label: "MASSA", value: "${_simulator.currentBatchMassGrams.toInt()}g", color: Colors.grey)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DataTile(
+                                label: "CARGA",
+                                value: _simulator.chargeTempSnapshot != null
+                                    ? "${_simulator.chargeTempSnapshot!.toStringAsFixed(1)}°"
+                                    : "--.-°",
+                                color: Colors.lightBlueAccent),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DataTile(
+                                label: "TP",
+                                value: _simulator.turningPointTemp != null
+                                    ? "${_simulator.turningPointTemp!.toStringAsFixed(1)}° / ${_formatTime(_simulator.turningPointTime!)}"
+                                    : "--.-° / --:--",
+                                color: Colors.purpleAccent,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ],

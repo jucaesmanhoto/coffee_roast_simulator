@@ -85,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       initialHeat: double.tryParse(_initialHeatController.text) ?? 95.0,
       initialAirflow: double.tryParse(_initialAirflowController.text) ?? 25.0,
       initialDrumSpeed: double.tryParse(_initialDrumSpeedController.text) ?? 70.0,
-      timeScale: double.tryParse(_timeScaleController.text) ?? 10.0,
+      timeScale: double.tryParse(_timeScaleController.text) ?? 5.0,
     );
 
     Navigator.pop(context, {'coffee': newCoffee, 'roasterSettings': newRoasterSettings});
