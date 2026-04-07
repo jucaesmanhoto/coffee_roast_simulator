@@ -75,9 +75,9 @@ class _RoastChartState extends State<RoastChart> {
           width: tooltipWidth,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.86),
+            color: Colors.black.withValues(alpha: 0.86),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: DefaultTextStyle(
             style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -117,7 +117,7 @@ class _RoastChartState extends State<RoastChart> {
       return [
         VerticalLine(
           x: timeInMinutes,
-          color: Colors.purpleAccent.withOpacity(0.5),
+          color: Colors.purpleAccent.withValues(alpha: 0.5),
           strokeWidth: 2,
           dashArray: [4, 4], // Padrão tracejado: 4 pixels desenhados, 4 pixels vazios
           label: VerticalLineLabel(
@@ -125,7 +125,7 @@ class _RoastChartState extends State<RoastChart> {
             labelResolver: (line) => 'TP',
             alignment: Alignment.topRight,
             style: TextStyle(
-              color: Colors.purpleAccent.withOpacity(0.8),
+              color: Colors.purpleAccent.withValues(alpha: 0.8),
               fontWeight: FontWeight.bold,
               fontSize: 10,
             ),
@@ -142,8 +142,8 @@ class _RoastChartState extends State<RoastChart> {
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10)],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
           ),
           child: Stack(
             clipBehavior: Clip.none,
@@ -162,7 +162,7 @@ class _RoastChartState extends State<RoastChart> {
                       return spotIndexes.map((spotIndex) {
                         return TouchedSpotIndicatorData(
                           FlLine(
-                            color: indicatorColor.withOpacity(0.35),
+                            color: indicatorColor.withValues(alpha: 0.35),
                             strokeWidth: 2,
                           ),
                           FlDotData(
@@ -193,8 +193,8 @@ class _RoastChartState extends State<RoastChart> {
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: true,
-                    getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
-                    getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withOpacity(0.15), strokeWidth: 1),
+                    getDrawingHorizontalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.15), strokeWidth: 1),
+                    getDrawingVerticalLine: (v) => FlLine(color: Colors.white.withValues(alpha: 0.15), strokeWidth: 1),
                   ),
                   titlesData: FlTitlesData(
                     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -240,12 +240,12 @@ class _RoastChartState extends State<RoastChart> {
                       barWidth: 4,
                       isStrokeCapRound: true,
                       dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: true, color: Colors.orange.withOpacity(0.1)),
+                      belowBarData: BarAreaData(show: true, color: Colors.orange.withValues(alpha: 0.1)),
                     ),
                     LineChartBarData(
                       spots: widget.rorPoints.map((spot) => FlSpot(spot.x, spot.y * (250 / 25))).toList(),
                       isCurved: true,
-                      color: Colors.cyanAccent.withOpacity(0.8),
+                      color: Colors.cyanAccent.withValues(alpha: 0.8),
                       barWidth: 2,
                       isStrokeCapRound: true,
                       dotData: const FlDotData(show: false),

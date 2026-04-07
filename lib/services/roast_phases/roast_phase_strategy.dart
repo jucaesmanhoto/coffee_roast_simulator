@@ -5,11 +5,13 @@ class PhasePhysicsResult {
   final double qTransfer;
   final double qEvaporativeCooling;
   final double qReaction;
+  final double moistureLossRate;
 
   PhasePhysicsResult({
     this.qTransfer = 0,
     this.qEvaporativeCooling = 0,
     this.qReaction = 0,
+    this.moistureLossRate = 0,
   });
 }
 

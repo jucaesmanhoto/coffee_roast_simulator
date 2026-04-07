@@ -55,10 +55,10 @@ class RoasterSettings {
     this.model = 'Kaleido M10',
     this.batchSizeGrams = 600.0,
     this.chargeTemp = 208.0,
-    this.initialHeat = 90.0,
+    this.initialHeat = 70.0,
     this.initialAirflow = 20.0,
     this.initialDrumSpeed = 70.0,
-    this.timeScale = 3.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+    this.timeScale = 5.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
@@ -70,8 +70,10 @@ class RoasterSettings {
 class RoastSimulatorService {
   // --- Constantes das Fases da Torra ---
   static const double dryingToEndTemp = 150.0; // Temp. final da fase de secagem
-  static const double maillardToEndTemp = 192.0; // Temp. final de Maillard (início do 1º crack)
+  static const double maillardToEndTemp = 195.0; // Temp. final de Maillard (início do 1º crack)
   static const double combustionTemp = 240.0; // Temp. de combustão do café
+  static const double dryingToMaillardTransitionWidth = 20.0;
+  static const double maillardToDevelopmentTransitionWidth = 12.0;
 
 
   // Parâmetros de Simulação
@@ -117,6 +119,87 @@ class RoastSimulatorService {
           RoastPhase.maillard: MaillardPhaseStrategy(),
           RoastPhase.development: DevelopmentPhaseStrategy(),
         };
+
+  double _getDryingToMaillardBlendFactor() {
+    final transitionStart = dryingToEndTemp - (dryingToMaillardTransitionWidth / 2);
+    final normalizedFactor = (((trueBeanCoreTemp - transitionStart) /
+          dryingToMaillardTransitionWidth)
+        .clamp(0.0, 1.0))
+      .toDouble();
+    return normalizedFactor * normalizedFactor * (3.0 - (2.0 * normalizedFactor));
+  }
+
+  double _getMaillardToDevelopmentBlendFactor() {
+    final transitionStart =
+        maillardToEndTemp - (maillardToDevelopmentTransitionWidth / 2);
+    final normalizedFactor = (((trueBeanCoreTemp - transitionStart) /
+                maillardToDevelopmentTransitionWidth)
+            .clamp(0.0, 1.0))
+        .toDouble();
+    return normalizedFactor * normalizedFactor * (3.0 - (2.0 * normalizedFactor));
+  }
+
+  PhasePhysicsResult _blendPhysicsResults(
+    PhasePhysicsResult first,
+    PhasePhysicsResult second,
+    double factor,
+  ) {
+    final inverseFactor = 1.0 - factor;
+    return PhasePhysicsResult(
+      qTransfer: first.qTransfer * inverseFactor + second.qTransfer * factor,
+      qEvaporativeCooling:
+          first.qEvaporativeCooling * inverseFactor + second.qEvaporativeCooling * factor,
+      qReaction: first.qReaction * inverseFactor + second.qReaction * factor,
+      moistureLossRate:
+          first.moistureLossRate * inverseFactor + second.moistureLossRate * factor,
+    );
+  }
+
+  PhasePhysicsResult _calculatePhasePhysics() {
+    final dryingPhysics = _phaseStrategies[RoastPhase.drying]!.calculatePhysics(this);
+    final maillardPhysics = _phaseStrategies[RoastPhase.maillard]!.calculatePhysics(this);
+    final developmentPhysics =
+        _phaseStrategies[RoastPhase.development]!.calculatePhysics(this);
+
+    final maillardToDevelopmentBlendFactor =
+        _getMaillardToDevelopmentBlendFactor();
+    if (maillardToDevelopmentBlendFactor > 0.0) {
+      if (maillardToDevelopmentBlendFactor >= 1.0) {
+        return developmentPhysics;
+      }
+
+      return _blendPhysicsResults(
+        maillardPhysics,
+        developmentPhysics,
+        maillardToDevelopmentBlendFactor,
+      );
+    }
+
+    final blendFactor = _getDryingToMaillardBlendFactor();
+
+    if (blendFactor <= 0.0) {
+      return dryingPhysics;
+    }
+
+    if (blendFactor >= 1.0) {
+      return maillardPhysics;
+    }
+
+    return _blendPhysicsResults(dryingPhysics, maillardPhysics, blendFactor);
+  }
+
+  void _applyMoistureLoss(double currentBatchMassKg, double moistureLossRate) {
+    if (coffee.currentMoisture <= 2.0 || moistureLossRate <= 0) {
+      return;
+    }
+
+    final maxAllowedLossRate = (coffee.currentMoisture - 2.0) / 100.0;
+    final appliedLossRate = min(moistureLossRate, maxAllowedLossRate);
+    final moistureMassLossKg = currentBatchMassKg * appliedLossRate;
+
+    coffee.currentMoisture -= appliedLossRate * 100;
+    currentBatchMassGrams -= moistureMassLossKg * 1000;
+  }
 
 
   void resetSimulation() {
@@ -253,10 +336,13 @@ class RoastSimulatorService {
           dryingPhaseEndTime = roastSeconds;
         }
 
-        final strategy = _phaseStrategies[roastPhase]!;
+        if (!firstCrackHappened && beanTemp >= maillardToEndTemp) {
+          firstCrackHappened = true;
+        }
 
-        // 2. DELEGAR CÁLCULO DA FÍSICA PARA A ESTRATÉGIA ATUAL
-        final physicsResult = strategy.calculatePhysics(this);
+        // 2. CALCULAR A FÍSICA COM TRANSIÇÃO SUAVE ENTRE SECAGEM E MAILLARD
+        final physicsResult = _calculatePhasePhysics();
+        _applyMoistureLoss(currentBatchMassKg, physicsResult.moistureLossRate);
 
         // Detecção do Turning Point (TP) - O ponto mais baixo que a BT atinge.
         if (!turningPointDetected) {
