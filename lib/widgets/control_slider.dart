@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ControlSlider extends StatelessWidget {
   final String label;
   final double value;
   final Color color;
   final ValueChanged<double>? onChanged;
+  final double min;
+  final double max;
+  final double? step;
 
   const ControlSlider({
     super.key,
@@ -12,29 +16,37 @@ class ControlSlider extends StatelessWidget {
     required this.value,
     required this.color,
     this.onChanged,
+    this.min = 0.0,
+    this.max = 100.0,
+    this.step,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Calcula o número de divisões para as marcas visuais do slider.
+    final int? divisions = (step != null && step! > 0)
+        ? ((max - min) / step!).round()
+        : null;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-            SizedBox(width: 16),
-            Text("${value.toInt()}%", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 4,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+        Text(
+          '$label - ${value.toInt()}%',
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            color: Colors.grey.withAlpha(200),
+            fontWeight: FontWeight.bold,
           ),
-          child: Slider(value: value, min: 0, max: 100, activeColor: color, inactiveColor: color.withValues(alpha: 0.1), onChanged: onChanged),
+        ),
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+          activeColor: color,
+          inactiveColor: color.withValues(alpha: 0.3),
         ),
       ],
     );

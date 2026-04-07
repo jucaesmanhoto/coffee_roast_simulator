@@ -4,15 +4,42 @@ import 'package:flutter/material.dart';
 class RoastChart extends StatelessWidget {
   final List<FlSpot> btPoints;
   final List<FlSpot> rorPoints;
+  final int? turningPointTime; // Tempo em segundos do TP
 
   const RoastChart({
     super.key,
     required this.btPoints,
     required this.rorPoints,
+    this.turningPointTime,
   });
 
   @override
   Widget build(BuildContext context) {
+    List<VerticalLine> buildExtraLines() {
+      if (turningPointTime == null) {
+        return [];
+      }
+      final double timeInMinutes = turningPointTime! / 60.0;
+      return [
+        VerticalLine(
+          x: timeInMinutes,
+          color: Colors.purpleAccent.withValues(alpha: 0.5),
+          strokeWidth: 2,
+          dashArray: [4, 4], // Padrão tracejado: 4 pixels desenhados, 4 pixels vazios
+          label: VerticalLineLabel(
+            show: true,
+            labelResolver: (line) => 'TP',
+            alignment: Alignment.topRight,
+            style: TextStyle(
+              color: Colors.purpleAccent.withValues(alpha: 0.8),
+              fontWeight: FontWeight.bold,
+              fontSize: 10,
+            ),
+          ),
+        ),
+      ];
+    }
+
     return Container(
       height: 350,
       padding: const EdgeInsets.fromLTRB(10, 20, 20, 10),
@@ -22,6 +49,11 @@ class RoastChart extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)]),
       child: LineChart(LineChartData(
+          // Linhas verticais para eventos
+          extraLinesData: ExtraLinesData(
+            verticalLines: buildExtraLines(),
+          ),
+
           // Configuração dos limites dos eixos
           minX: 0,
           maxX: 16, // Limite de 16 minutos

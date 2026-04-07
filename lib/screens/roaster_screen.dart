@@ -49,6 +49,12 @@ class _RoasterScreenState extends State<RoasterScreen> {
       }
       setState(() {
         _simulator.updatePhysics();
+        // Verifica se o café pegou fogo após a atualização da física
+        if (_simulator.hasCaughtFire) {
+          _timer?.cancel();
+          _simulator.stopRoast(); // Garante que o estado seja 'idle'
+          _showFireAlert();
+        }
       });
     });
 
@@ -90,6 +96,25 @@ class _RoasterScreenState extends State<RoasterScreen> {
         );
       });
     }
+  }
+
+  void _showFireAlert() {
+    // Garante que o alerta seja mostrado após o build atual
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("COMBUSTÃO!", style: TextStyle(color: Colors.redAccent)),
+          content: const Text("O seu café pegou fogo! A temperatura excedeu 240°C e a torra foi interrompida."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   String _formatTime(int sec) {
@@ -166,12 +191,24 @@ class _RoasterScreenState extends State<RoasterScreen> {
                     const SizedBox(height: 60),
                     RotatedBox(
                       quarterTurns: 3, // Gira o slider para a vertical
-                      child: ControlSlider(label: "POTÊNCIA", value: _simulator.heatInput, color: Colors.redAccent, onChanged: _simulator.roastState != RoastState.idle ? (v) => setState(() => _simulator.heatInput = v) : null),
+                      child: ControlSlider(
+                        label: "POTÊNCIA",
+                        value: _simulator.heatInput,
+                        color: Colors.redAccent,
+                        step: _simulator.roasterSettings.controlStep,
+                        onChanged: _simulator.roastState != RoastState.idle ? (v) => setState(() => _simulator.heatInput = v) : null,
+                      ),
                     ),
                     const SizedBox(height: 40),
                     RotatedBox(
                       quarterTurns: 3,
-                      child: ControlSlider(label: "FLUXO DE AR", value: _simulator.airFlow, color: Colors.blueAccent, onChanged: _simulator.roastState != RoastState.idle ? (v) => setState(() => _simulator.airFlow = v) : null),
+                      child: ControlSlider(
+                        label: "FLUXO DE AR",
+                        value: _simulator.airFlow,
+                        color: Colors.blueAccent,
+                        step: _simulator.roasterSettings.controlStep,
+                        onChanged: _simulator.roastState != RoastState.idle ? (v) => setState(() => _simulator.airFlow = v) : null,
+                      ),
                     ),
                   ],
                 ),
@@ -181,7 +218,11 @@ class _RoasterScreenState extends State<RoasterScreen> {
               Expanded(
                 child: Column(
                   children: [
-                    RoastChart(btPoints: _simulator.btPoints, rorPoints: _simulator.rorPoints),
+                    RoastChart(
+                      btPoints: _simulator.btPoints,
+                      rorPoints: _simulator.rorPoints,
+                      turningPointTime: _simulator.turningPointTime,
+                    ),
                     const SizedBox(height: 16),
                     Column(
                       children: [
@@ -193,7 +234,7 @@ class _RoasterScreenState extends State<RoasterScreen> {
                             const SizedBox(width: 12),
                             Expanded(child: DataTile(label: "TEMPO", value: _formatTime(_simulator.roastSeconds), color: Colors.white)),
                             const SizedBox(width: 12),
-                            Expanded(child: DataTile(label: "MASSA", value: "${_simulator.currentBatchMassGrams.toInt()}g", color: Colors.grey)),
+                            Expanded(child: DataTile(label: "MASSA", value: "${_simulator.roasterSettings.batchSizeGrams.toInt()}g", color: Colors.grey)),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -215,6 +256,16 @@ class _RoasterScreenState extends State<RoasterScreen> {
                                     ? "${_simulator.turningPointTemp!.toStringAsFixed(1)}° / ${_formatTime(_simulator.turningPointTime!)}"
                                     : "--.-° / --:--",
                                 color: Colors.purpleAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DataTile(
+                                label: "SECAGEM",
+                                value: _simulator.dryingPhaseEndTime != null
+                                    ? "${RoastSimulatorService.dryingToEndTemp.toStringAsFixed(0)}° / ${_formatTime(_simulator.dryingPhaseEndTime!)}"
+                                    : "--° / --:--",
+                                color: Colors.yellowAccent,
                               ),
                             ),
                           ],

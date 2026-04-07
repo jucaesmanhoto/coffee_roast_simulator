@@ -45,6 +45,7 @@ class RoasterSettings {
   final double maxPowerWatts; // Potência máxima do aquecedor
   final double drumMassKg; // Massa térmica do tambor
   final double drumSpecificHeat; // Calor específico do material do tambor (Aço Inox 304)
+  final double controlStep; // Incremento dos controles (e.g., 5% para o Kaleido M10)
 
   /// Fator de influência da massa de grãos na leitura da sonda (BT).
   /// 1.0 = sonda mede 100% a temp. do grão; 0.0 = sonda mede 100% a temp. do ar.
@@ -61,6 +62,7 @@ class RoasterSettings {
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
+    this.controlStep = 5.0, // Kaleido M10 opera em steps de 5%
     this.probeBeanMassInfluence = 0.635, // Ponto de partida para um TP realista.
   });
 }
@@ -69,7 +71,7 @@ class RoastSimulatorService {
   // --- Constantes das Fases da Torra ---
   static const double dryingToEndTemp = 150.0; // Temp. final da fase de secagem
   static const double maillardToEndTemp = 192.0; // Temp. final de Maillard (início do 1º crack)
-  static const double developmentEndTemp = 230.0; // Temp. máxima permitida para o grão
+  static const double combustionTemp = 240.0; // Temp. de combustão do café
 
 
   // Parâmetros de Simulação
@@ -85,9 +87,11 @@ class RoastSimulatorService {
   RoastState roastState = RoastState.idle;
   double currentBatchMassGrams; // Massa atual do lote, diminui com a evaporação
   RoastPhase roastPhase = RoastPhase.drying;
+  bool hasCaughtFire = false;
   bool firstCrackHappened = false;
   double? turningPointTemp;
   int? turningPointTime;
+  int? dryingPhaseEndTime;
   bool turningPointDetected = false;
   bool hasRorDropped = false; // Nova flag para a lógica do TP
   double lowestBtSinceCharge = double.infinity; // Para detectar o TP real
@@ -130,11 +134,13 @@ class RoastSimulatorService {
     airFlow = 20.0;
     roastState = RoastState.idle;
     coffee = Coffee(); // Reseta o café para o estado inicial
+    hasCaughtFire = false;
     roastPhase = RoastPhase.drying;
     firstCrackHappened = false;
     currentBatchMassGrams = roasterSettings.batchSizeGrams;
     turningPointTemp = null;
     turningPointTime = null;
+    dryingPhaseEndTime = null;
     turningPointDetected = false;
     hasRorDropped = false;
     lowestBtSinceCharge = double.infinity;
@@ -143,6 +149,7 @@ class RoastSimulatorService {
 
   void preheat() {
     // Limpa os dados do gráfico de uma torra anterior
+    hasCaughtFire = false;
     chargeTempSnapshot = null;
     btPoints.clear();
     rorPoints.clear();
@@ -175,6 +182,7 @@ class RoastSimulatorService {
     rorPoints.add(const FlSpot(0, 0));
     turningPointTemp = null;
     turningPointTime = null;
+    dryingPhaseEndTime = null;
     turningPointDetected = false;
     hasRorDropped = false;
     lowestBtSinceCharge = beanTemp; // Inicia a busca pelo TP a partir da temperatura de carga
@@ -228,6 +236,8 @@ class RoastSimulatorService {
         roastSeconds++;
         double currentBatchMassKg = currentBatchMassGrams / 1000.0;
 
+        RoastPhase previousPhase = roastPhase;
+
         // 1. ATUALIZAR FASE DA TORRA E OBTER ESTRATÉGIA
         if (trueBeanCoreTemp < dryingToEndTemp) {
           roastPhase = RoastPhase.drying;
@@ -235,6 +245,10 @@ class RoastSimulatorService {
           roastPhase = RoastPhase.maillard;
         } else {
           roastPhase = RoastPhase.development;
+        }
+        // Captura o momento em que a secagem termina
+        if (previousPhase == RoastPhase.drying && roastPhase == RoastPhase.maillard && dryingPhaseEndTime == null) {
+          dryingPhaseEndTime = roastSeconds;
         }
         final strategy = _phaseStrategies[roastPhase]!;
 
@@ -261,8 +275,9 @@ class RoastSimulatorService {
         trueBeanCoreTemp += coreTempDelta * timeStep;
 
         // 4. GARANTIR LIMITE MÁXIMO DE TEMPERATURA
-        if (trueBeanCoreTemp > developmentEndTemp) {
-          trueBeanCoreTemp = developmentEndTemp;
+        if (trueBeanCoreTemp >= combustionTemp) {
+          trueBeanCoreTemp = combustionTemp;
+          hasCaughtFire = true;
         }
 
         // 6. ATUALIZAR ROR E GRÁFICOS (baseado na leitura da sonda)
