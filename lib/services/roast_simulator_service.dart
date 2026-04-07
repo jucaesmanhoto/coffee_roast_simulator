@@ -239,17 +239,20 @@ class RoastSimulatorService {
         RoastPhase previousPhase = roastPhase;
 
         // 1. ATUALIZAR FASE DA TORRA E OBTER ESTRATÉGIA
-        if (trueBeanCoreTemp < dryingToEndTemp) {
+        // TODA a lógica de fase e eventos deve ser baseada na temperatura da sonda (BT), que é o que o usuário vê.
+        if (beanTemp < dryingToEndTemp) {
           roastPhase = RoastPhase.drying;
-        } else if (trueBeanCoreTemp < maillardToEndTemp) {
+        } else if (beanTemp < maillardToEndTemp) {
           roastPhase = RoastPhase.maillard;
         } else {
           roastPhase = RoastPhase.development;
         }
+
         // Captura o momento em que a secagem termina
-        if (previousPhase == RoastPhase.drying && roastPhase == RoastPhase.maillard && dryingPhaseEndTime == null) {
+        if (previousPhase == RoastPhase.drying && roastPhase == RoastPhase.maillard && dryingPhaseEndTime == null && beanTemp >= dryingToEndTemp) {
           dryingPhaseEndTime = roastSeconds;
         }
+
         final strategy = _phaseStrategies[roastPhase]!;
 
         // 2. DELEGAR CÁLCULO DA FÍSICA PARA A ESTRATÉGIA ATUAL
@@ -275,9 +278,10 @@ class RoastSimulatorService {
         trueBeanCoreTemp += coreTempDelta * timeStep;
 
         // 4. GARANTIR LIMITE MÁXIMO DE TEMPERATURA
-        if (trueBeanCoreTemp >= combustionTemp) {
-          trueBeanCoreTemp = combustionTemp;
+        if (beanTemp >= combustionTemp) {
+          beanTemp = combustionTemp; // Trava a temperatura do display
           hasCaughtFire = true;
+          // A simulação será interrompida na UI
         }
 
         // 6. ATUALIZAR ROR E GRÁFICOS (baseado na leitura da sonda)

@@ -46,7 +46,7 @@ class ControlSlider extends StatelessWidget {
           divisions: divisions,
           onChanged: onChanged,
           activeColor: color,
-          inactiveColor: color.withValues(alpha: 0.3),
+          inactiveColor: color.withOpacity(0.3),
         ),
       ],
     );
