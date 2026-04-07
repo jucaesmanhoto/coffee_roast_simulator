@@ -46,17 +46,22 @@ class RoasterSettings {
   final double drumMassKg; // Massa térmica do tambor
   final double drumSpecificHeat; // Calor específico do material do tambor (Aço Inox 304)
 
+  /// Fator de influência da massa de grãos na leitura da sonda (BT).
+  /// 1.0 = sonda mede 100% a temp. do grão; 0.0 = sonda mede 100% a temp. do ar.
+  final double probeBeanMassInfluence;
+
   RoasterSettings({
     this.model = 'Kaleido M10',
     this.batchSizeGrams = 600.0,
     this.chargeTemp = 208.0,
-    this.initialHeat = 75.0,
-    this.initialAirflow = 25.0,
+    this.initialHeat = 90.0,
+    this.initialAirflow = 20.0,
     this.initialDrumSpeed = 70.0,
     this.timeScale = 3.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
+    this.probeBeanMassInfluence = 0.635, // Ponto de partida para um TP realista.
   });
 }
 
@@ -68,10 +73,10 @@ class RoastSimulatorService {
 
 
   // Parâmetros de Simulação
-  double beanTemp = 190.0; // Temperatura do grão (BT)
+  double beanTemp = 205.0; // Temperatura do grão (BT)
   double trueBeanCoreTemp = 20.0; // Temperatura interna REAL do grão
-  double drumTemp = 190.0; // Temperatura do tambor (ou ambiente interno)
-  double airTemp = 190.0; // Temperatura do ar dentro do torrador
+  double drumTemp = 205.0; // Temperatura do tambor (ou ambiente interno)
+  double airTemp = 205.0; // Temperatura do ar dentro do torrador
   static const double ambientTemp = 20.0; // Temperatura ambiente fixa
   double heatInput = 0.0;
   double airFlow = 20.0;
@@ -85,6 +90,7 @@ class RoastSimulatorService {
   int? turningPointTime;
   bool turningPointDetected = false;
   bool hasRorDropped = false; // Nova flag para a lógica do TP
+  double lowestBtSinceCharge = double.infinity; // Para detectar o TP real
   double? chargeTempSnapshot;
 
   // Dados do Gráfico
@@ -131,6 +137,7 @@ class RoastSimulatorService {
     turningPointTime = null;
     turningPointDetected = false;
     hasRorDropped = false;
+    lowestBtSinceCharge = double.infinity;
     chargeTempSnapshot = null;
   }
 
@@ -170,6 +177,7 @@ class RoastSimulatorService {
     turningPointTime = null;
     turningPointDetected = false;
     hasRorDropped = false;
+    lowestBtSinceCharge = beanTemp; // Inicia a busca pelo TP a partir da temperatura de carga
   }
 
   void stopRoast() {
@@ -210,9 +218,11 @@ class RoastSimulatorService {
 
       case RoastState.roasting:
         // Após a carga, a sonda é resfriada pela massa de grãos, mas aquecida pelo ar.
-        // A temperatura da sonda (beanTemp) se move em direção a um equilíbrio entre a temp. do grão e do ar.
-        double targetProbeTemp = (trueBeanCoreTemp * 0.8) + (airTemp * 0.2); // 80% grão, 20% ar
-        double inertiaFactor = 0.05;
+        // A sonda (BT) mede uma mistura da temperatura real do grão e do ar ao redor.
+        // A proporção é controlada por `probeBeanMassInfluence` para permitir ajuste fino.
+        double probeInfluence = roasterSettings.probeBeanMassInfluence;
+        double targetProbeTemp = (trueBeanCoreTemp * probeInfluence) + (airTemp * (1.0 - probeInfluence));
+        double inertiaFactor = 0.08; // Aumenta a reatividade da sonda
         beanTemp += (targetProbeTemp - beanTemp) * inertiaFactor;
 
         roastSeconds++;
@@ -231,14 +241,17 @@ class RoastSimulatorService {
         // 2. DELEGAR CÁLCULO DA FÍSICA PARA A ESTRATÉGIA ATUAL
         final physicsResult = strategy.calculatePhysics(this);
 
-        // Detecção do Turning Point (ocorre na fase de secagem)
-        if (!hasRorDropped && ror < 0) {
-          hasRorDropped = true;
-        }
-        if (!turningPointDetected && hasRorDropped && roastPhase == RoastPhase.drying && ror >= 0) {
-          turningPointDetected = true;
-          turningPointTemp = beanTemp;
-          turningPointTime = roastSeconds;
+        // Detecção do Turning Point (TP) - O ponto mais baixo que a BT atinge.
+        if (!turningPointDetected) {
+          if (beanTemp < lowestBtSinceCharge) {
+            // A temperatura ainda está caindo, continue atualizando o mínimo.
+            lowestBtSinceCharge = beanTemp;
+          } else {
+            // A temperatura parou de cair e começou a subir. O TP foi o último ponto mínimo.
+            turningPointDetected = true;
+            turningPointTemp = lowestBtSinceCharge;
+            turningPointTime = roastSeconds > 0 ? roastSeconds - 1 : 0; // O TP ocorreu no segundo anterior.
+          }
         }
 
         // 3. CALCULAR VARIAÇÃO DA TEMPERATURA COM BASE NOS RESULTADOS DA ESTRATÉGIA
