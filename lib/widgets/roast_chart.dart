@@ -187,7 +187,7 @@ class _RoastChartState extends State<RoastChart> {
                     verticalLines: buildExtraLines(),
                   ),
                   minX: 0,
-                  maxX: 16,
+                  maxX: 14,
                   minY: 0,
                   maxY: 250,
                   gridData: FlGridData(

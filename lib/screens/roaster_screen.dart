@@ -76,6 +76,12 @@ class _RoasterScreenState extends State<RoasterScreen> {
     });
   }
 
+  void _markFirstCrack() {
+    setState(() {
+      _simulator.markFirstCrack();
+    });
+  }
+
   void _openSettings() async {
     final result = await Navigator.push(
       context,
@@ -119,6 +125,22 @@ class _RoasterScreenState extends State<RoasterScreen> {
 
   String _formatTime(int sec) {
     return "${(sec ~/ 60).toString().padLeft(2, '0')}:${(sec % 60).toString().padLeft(2, '0')}";
+  }
+
+  String get _firstCrackValue {
+    if (_simulator.firstCrackTime == null || _simulator.firstCrackTemp == null) {
+      return 'MARCAR';
+    }
+
+    return '${_simulator.firstCrackTemp!.toStringAsFixed(1)}° / ${_formatTime(_simulator.firstCrackTime!)}';
+  }
+
+  String get _developmentDisplay {
+    if (_simulator.firstCrackTime == null) {
+      return 'DEV: --:--  |  --.-%';
+    }
+
+    return 'DEV: ${_formatTime(_simulator.developmentTimeSeconds)}  |  ${_simulator.developmentTimePercentage.toStringAsFixed(1)}%';
   }
 
   List<Widget> _buildAppBarActions() {
@@ -266,6 +288,15 @@ class _RoasterScreenState extends State<RoasterScreen> {
                                     ? "${RoastSimulatorService.dryingToEndTemp.toStringAsFixed(0)}° / ${_formatTime(_simulator.dryingPhaseEndTime!)}"
                                     : "--° / --:--",
                                 color: Colors.yellowAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DataTile(
+                                label: '1º CRACK',
+                                value: _firstCrackValue,
+                                color: Colors.deepOrangeAccent,
+                                onTap: _simulator.roastState == RoastState.roasting ? _markFirstCrack : null,
                               ),
                             ),
                           ],

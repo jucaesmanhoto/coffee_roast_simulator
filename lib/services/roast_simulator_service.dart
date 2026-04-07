@@ -58,7 +58,7 @@ class RoasterSettings {
     this.initialHeat = 70.0,
     this.initialAirflow = 20.0,
     this.initialDrumSpeed = 70.0,
-    this.timeScale = 5.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+    this.timeScale = 2.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
@@ -91,6 +91,8 @@ class RoastSimulatorService {
   RoastPhase roastPhase = RoastPhase.drying;
   bool hasCaughtFire = false;
   bool firstCrackHappened = false;
+  double? firstCrackTemp;
+  int? firstCrackTime;
   double? turningPointTemp;
   int? turningPointTime;
   int? dryingPhaseEndTime;
@@ -119,6 +121,29 @@ class RoastSimulatorService {
           RoastPhase.maillard: MaillardPhaseStrategy(),
           RoastPhase.development: DevelopmentPhaseStrategy(),
         };
+
+  int get developmentTimeSeconds {
+    if (firstCrackTime == null || roastSeconds < firstCrackTime!) {
+      return 0;
+    }
+    return roastSeconds - firstCrackTime!;
+  }
+
+  double get developmentTimePercentage {
+    if (firstCrackTime == null || roastSeconds <= 0) {
+      return 0;
+    }
+    return (developmentTimeSeconds / roastSeconds) * 100;
+  }
+
+  void markFirstCrack() {
+    if (roastState != RoastState.roasting) {
+      return;
+    }
+
+    firstCrackTime = roastSeconds;
+    firstCrackTemp = beanTemp;
+  }
 
   double _getDryingToMaillardBlendFactor() {
     final transitionStart = dryingToEndTemp - (dryingToMaillardTransitionWidth / 2);
@@ -220,10 +245,14 @@ class RoastSimulatorService {
     hasCaughtFire = false;
     roastPhase = RoastPhase.drying;
     firstCrackHappened = false;
+    firstCrackTemp = null;
+    firstCrackTime = null;
     currentBatchMassGrams = roasterSettings.batchSizeGrams;
     turningPointTemp = null;
     turningPointTime = null;
     dryingPhaseEndTime = null;
+    firstCrackTemp = null;
+    firstCrackTime = null;
     turningPointDetected = false;
     hasRorDropped = false;
     lowestBtSinceCharge = double.infinity;
