@@ -76,6 +76,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       altitude: int.tryParse(_altitudeController.text) ?? 1150,
       density: double.tryParse(_densityController.text) ?? 0.7,
       initialMoisture: double.tryParse(_moistureController.text) ?? 11.5,
+      firstCrackStartTemp: widget.initialCoffee.firstCrackStartTemp,
+      firstCrackPeakTemp: widget.initialCoffee.firstCrackPeakTemp,
+      firstCrackEndTemp: widget.initialCoffee.firstCrackEndTemp,
+      firstCrackPeakPopIntervalSeconds:
+          widget.initialCoffee.firstCrackPeakPopIntervalSeconds,
+      outlierStartTemp: widget.initialCoffee.outlierStartTemp,
+      outlierPeakPopIntervalSeconds: widget.initialCoffee.outlierPeakPopIntervalSeconds,
     );
 
     final newRoasterSettings = RoasterSettings(

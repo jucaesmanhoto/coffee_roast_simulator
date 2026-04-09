@@ -12,6 +12,12 @@ class Coffee {
   final int altitude;
   final double density; // g/mL, densidade inicial
   final double initialMoisture; // percentual, base úmida
+  final double firstCrackStartTemp;
+  final double firstCrackPeakTemp;
+  final double firstCrackEndTemp;
+  final double firstCrackPeakPopIntervalSeconds;
+  final double outlierStartTemp; // Temperatura em que começam os outliers
+  final double outlierPeakPopIntervalSeconds; // Intervalo entre outliers (muito maior que First Crack)
 
   double currentMoisture; // Umidade atual, que muda durante a torra
 
@@ -21,6 +27,12 @@ class Coffee {
     this.altitude = 1150,
     this.density = 0.7,
     this.initialMoisture = 11.5,
+    this.firstCrackStartTemp = 194.0,
+    this.firstCrackPeakTemp = 198.0,
+    this.firstCrackEndTemp = 212.0,
+    this.firstCrackPeakPopIntervalSeconds = 0.12,
+    this.outlierStartTemp = 185.0, // Começam os outliers
+    this.outlierPeakPopIntervalSeconds = 1.5, // Bem mais espaçados
   }) : currentMoisture = initialMoisture;
 
   /// Calcula o Calor Específico (Cp) em kJ/kg·K com base na umidade atual.
@@ -58,7 +70,7 @@ class RoasterSettings {
     this.initialHeat = 70.0,
     this.initialAirflow = 20.0,
     this.initialDrumSpeed = 70.0,
-    this.timeScale = 4.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+    this.timeScale = 2.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
@@ -74,6 +86,7 @@ class RoastSimulatorService {
   static const double combustionTemp = 240.0; // Temp. de combustão do café
   static const double dryingToMaillardTransitionWidth = 20.0;
   static const double maillardToDevelopmentTransitionWidth = 12.0;
+  static const double firstCrackPopRateScale = 0.33;
 
 
   // Parâmetros de Simulação
@@ -100,6 +113,8 @@ class RoastSimulatorService {
   bool hasRorDropped = false; // Nova flag para a lógica do TP
   double lowestBtSinceCharge = double.infinity; // Para detectar o TP real
   double? chargeTempSnapshot;
+  final Random _random = Random();
+  int _pendingFirstCrackPops = 0;
 
   // Dados do Gráfico
   final List<FlSpot> btPoints = [const FlSpot(0, 20)];
@@ -173,6 +188,108 @@ class RoastSimulatorService {
       return 0;
     }
     return (segmentSeconds / roastSeconds) * 100;
+  }
+
+  int consumePendingFirstCrackPops() {
+    final pending = _pendingFirstCrackPops;
+    _pendingFirstCrackPops = 0;
+    return pending;
+  }
+
+  int _samplePoisson(double lambda) {
+    if (lambda <= 0) {
+      return 0;
+    }
+
+    final l = exp(-lambda);
+    var k = 0;
+    var p = 1.0;
+
+    do {
+      k++;
+      p *= _random.nextDouble();
+    } while (p > l);
+
+    return k - 1;
+  }
+
+  double _firstCrackEnvelope(double temp) {
+    final start = coffee.firstCrackStartTemp;
+    final end = coffee.firstCrackEndTemp;
+    final peak = coffee.firstCrackPeakTemp.clamp(start + 0.1, end - 0.1).toDouble();
+
+    if (temp <= start || temp >= end) {
+      return 0.0;
+    }
+
+    if (temp <= peak) {
+      return ((temp - start) / (peak - start)).clamp(0.0, 1.0).toDouble();
+    }
+
+    return ((end - temp) / (end - peak)).clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Calcula o intervalo entre pops da fase de transição (depois do TP até o First Crack)
+  /// Retorna 0 se não estiver na janela válida
+  double _getTransitionPopIntervalSeconds() {
+    // Se ainda não detectou TP ou não está roastando, sem pops
+    if (!turningPointDetected || roastState != RoastState.roasting) {
+      return 0.0;
+    }
+
+    final outlierStart = coffee.outlierStartTemp; // 185°C - início dos outliers
+    final trackStartTemp = coffee.firstCrackStartTemp; // 195°C - início do First Crack
+
+    // Antes de 170°C (outlierStart), sem pops
+    if (beanTemp < outlierStart) {
+      return 0.0;
+    }
+
+    // Entre 170°C e 185°C: outliers com intervalo grande (0.8s a 1.5s)
+    if (beanTemp < trackStartTemp) {
+      // Transição suave: 1.5s no início até 0.8s perto do FC
+      final range = trackStartTemp - outlierStart;
+      final progress = (beanTemp - outlierStart) / range; // 0 a 1
+      return 1.5 - (progress * 0.7); // 1.5s → 0.8s
+    }
+
+    // A partir de 185°C: First Crack normal, intervalo curto
+    return 0.0; // Retorna 0 para indicar que está no FC propriamente dito
+  }
+
+  int _generateFirstCrackPopsForTick(double timeStepSeconds) {
+    if (roastState != RoastState.roasting) {
+      return 0;
+    }
+
+    // Só gera pops DEPOIS do turning point
+    if (!turningPointDetected) {
+      return 0;
+    }
+
+    final transitionInterval = _getTransitionPopIntervalSeconds();
+    // Se está na fase de transição (outliers), usa intervalo grande
+    if (transitionInterval > 0) {
+      final baseRateAtPeak = 1.0 / transitionInterval;
+      final massFactor = (roasterSettings.batchSizeGrams / 600.0).clamp(0.2, 3.0);
+      final lambda =
+          baseRateAtPeak * massFactor * timeStepSeconds * firstCrackPopRateScale;
+      return _samplePoisson(lambda);
+    }
+
+    // Gera o First Crack normal
+    final envelope = _firstCrackEnvelope(beanTemp);
+    if (envelope <= 0) {
+      return 0;
+    }
+
+    final peakInterval = coffee.firstCrackPeakPopIntervalSeconds.clamp(0.08, 0.75);
+    final baseRateAtPeak = 1.0 / peakInterval;
+    final massFactor = (roasterSettings.batchSizeGrams / 600.0).clamp(0.2, 3.0);
+    final lambda =
+      baseRateAtPeak * envelope * massFactor * timeStepSeconds * firstCrackPopRateScale;
+
+    return _samplePoisson(lambda);
   }
 
   void markFirstCrack() {
@@ -296,6 +413,7 @@ class RoastSimulatorService {
     hasRorDropped = false;
     lowestBtSinceCharge = double.infinity;
     chargeTempSnapshot = null;
+    _pendingFirstCrackPops = 0;
   }
 
   void preheat() {
@@ -305,6 +423,7 @@ class RoastSimulatorService {
     btPoints.clear();
     rorPoints.clear();
     rorPoints.add(const FlSpot(0, 0));
+    _pendingFirstCrackPops = 0;
 
     roastState = RoastState.preheating;
     // Apenas define o estado e os controles. A temperatura subirá gradualmente no updatePhysics.
@@ -337,11 +456,13 @@ class RoastSimulatorService {
     turningPointDetected = false;
     hasRorDropped = false;
     lowestBtSinceCharge = beanTemp; // Inicia a busca pelo TP a partir da temperatura de carga
+    _pendingFirstCrackPops = 0;
   }
 
   void stopRoast() {
     // Transiciona para o estado de resfriamento, mas mantém o timer para simular a queda de temperatura.
     roastState = RoastState.idle;
+    _pendingFirstCrackPops = 0;
   }
 
   void updatePhysics() {
@@ -376,6 +497,7 @@ class RoastSimulatorService {
         break;
 
       case RoastState.roasting:
+        _pendingFirstCrackPops = 0;
         // Após a carga, a sonda é resfriada pela massa de grãos, mas aquecida pelo ar.
         // A sonda (BT) mede uma mistura da temperatura real do grão e do ar ao redor.
         // A proporção é controlada por `probeBeanMassInfluence` para permitir ajuste fino.
@@ -409,6 +531,8 @@ class RoastSimulatorService {
         if (!firstCrackHappened && beanTemp >= maillardToEndTemp) {
           firstCrackHappened = true;
         }
+
+        _pendingFirstCrackPops = _generateFirstCrackPopsForTick(timeStep);
 
         // 2. CALCULAR A FÍSICA COM TRANSIÇÃO SUAVE ENTRE SECAGEM E MAILLARD
         final physicsResult = _calculatePhasePhysics();
@@ -449,6 +573,7 @@ class RoastSimulatorService {
         break;
 
       case RoastState.idle:
+        _pendingFirstCrackPops = 0;
         if (drumTemp > ambientTemp) {
           double coolingDrumDelta = (-drumHeatLoss) / (roasterSettings.drumMassKg * roasterSettings.drumSpecificHeat * 1000) * timeStep;
           drumTemp += coolingDrumDelta;

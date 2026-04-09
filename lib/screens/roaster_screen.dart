@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons, RotatedBox;
 import 'package:coffee_roast_simulator/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
@@ -16,8 +18,17 @@ class RoasterScreen extends StatefulWidget {
 }
 
 class _RoasterScreenState extends State<RoasterScreen> {
+  static const List<String> _firstCrackSounds = [
+    '101494__earthsounds__twig-snap-3.wav',
+    '25419__andrewweathers__popcorn-shove.wav',
+    '445816__thoryn__snapping-branch.wav',
+    '89402__zimbot__woodsnap9.wav',
+  ];
+
   late RoastSimulatorService _simulator;
   Timer? _timer;
+  final Random _soundRandom = Random();
+  final Set<AudioPlayer> _activePopPlayers = <AudioPlayer>{};
 
   @override
   void initState() {
@@ -29,6 +40,9 @@ class _RoasterScreenState extends State<RoasterScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    for (final player in _activePopPlayers) {
+      unawaited(player.dispose());
+    }
     super.dispose();
   }
 
@@ -56,6 +70,11 @@ class _RoasterScreenState extends State<RoasterScreen> {
           _showFireAlert();
         }
       });
+
+      final pendingPops = _simulator.consumePendingFirstCrackPops();
+      if (pendingPops > 0) {
+        _playFirstCrackBurst(pendingPops);
+      }
     });
 
     setState(() {
@@ -80,6 +99,62 @@ class _RoasterScreenState extends State<RoasterScreen> {
     setState(() {
       _simulator.markFirstCrack();
     });
+  }
+
+  void _playFirstCrackBurst(int popCount) {
+    if (popCount <= 0) {
+      return;
+    }
+
+    final tickMillis = (1000 / _simulator.roasterSettings.timeScale).round().clamp(80, 1400);
+    final maxPops = popCount.clamp(1, 18);
+
+    for (var i = 0; i < maxPops; i++) {
+      final delayMs = maxPops == 1 ? 0 : _soundRandom.nextInt(tickMillis);
+      final assetName = _firstCrackSounds[_soundRandom.nextInt(_firstCrackSounds.length)];
+      unawaited(Future.delayed(Duration(milliseconds: delayMs), () async {
+        if (!mounted || _simulator.roastState != RoastState.roasting) {
+          return;
+        }
+
+        await _playFirstCrackAsset(assetName);
+      }));
+    }
+  }
+
+  Future<void> _playFirstCrackAsset(String assetName) async {
+    final player = AudioPlayer();
+    _activePopPlayers.add(player);
+
+    void cleanup() {
+      if (_activePopPlayers.remove(player)) {
+        unawaited(player.dispose());
+      }
+    }
+
+    late final StreamSubscription<void> completeSubscription;
+    late final StreamSubscription<void> stopSubscription;
+    completeSubscription = player.onPlayerComplete.listen((_) {
+      unawaited(completeSubscription.cancel());
+      unawaited(stopSubscription.cancel());
+      cleanup();
+    });
+    stopSubscription = player.onPlayerStateChanged.listen((state) {
+      if (state == PlayerState.stopped || state == PlayerState.disposed) {
+        unawaited(completeSubscription.cancel());
+        unawaited(stopSubscription.cancel());
+        cleanup();
+      }
+    });
+
+    try {
+      await player.setReleaseMode(ReleaseMode.release);
+      await player.play(AssetSource(assetName), volume: 1.0);
+    } catch (_) {
+      unawaited(completeSubscription.cancel());
+      unawaited(stopSubscription.cancel());
+      cleanup();
+    }
   }
 
   void _openSettings() async {
