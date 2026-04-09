@@ -135,12 +135,45 @@ class _RoasterScreenState extends State<RoasterScreen> {
     return '${_simulator.firstCrackTemp!.toStringAsFixed(1)}° / ${_formatTime(_simulator.firstCrackTime!)}';
   }
 
-  String get _developmentDisplay {
-    if (_simulator.firstCrackTime == null) {
-      return 'DEV: --:--  |  --.-%';
-    }
+  bool get _hasRoastSession => _simulator.chargeTempSnapshot != null;
 
-    return 'DEV: ${_formatTime(_simulator.developmentTimeSeconds)}  |  ${_simulator.developmentTimePercentage.toStringAsFixed(1)}%';
+  String get _stripDryingLine {
+    if (!_hasRoastSession) {
+      return '--:-- · --%';
+    }
+    if (_simulator.roastSeconds <= 0) {
+      return '00:00 · 0.0%';
+    }
+    final sec = _simulator.dryingPhaseDurationSeconds;
+    final pct = _simulator.percentOfTotalRoast(sec);
+    return '${_formatTime(sec)} · ${pct.toStringAsFixed(1)}%';
+  }
+
+  String get _stripMaillardLine {
+    if (!_hasRoastSession) {
+      return '--:-- · --%';
+    }
+    if (_simulator.roastSeconds <= 0) {
+      return '00:00 · 0.0%';
+    }
+    final sec = _simulator.maillardBandDurationSeconds;
+    final pct = _simulator.percentOfTotalRoast(sec);
+    return '${_formatTime(sec)} · ${pct.toStringAsFixed(1)}%';
+  }
+
+  String get _stripPostCrackLine {
+    if (!_hasRoastSession) {
+      return '--:-- · --%';
+    }
+    if (_simulator.firstCrackTime == null) {
+      return '--:-- · --%';
+    }
+    if (_simulator.roastSeconds <= 0) {
+      return '00:00 · 0.0%';
+    }
+    final sec = _simulator.postFirstCrackDurationSeconds;
+    final pct = _simulator.percentOfTotalRoast(sec);
+    return '${_formatTime(sec)} · ${pct.toStringAsFixed(1)}%';
   }
 
   List<Widget> _buildAppBarActions() {
@@ -244,6 +277,9 @@ class _RoasterScreenState extends State<RoasterScreen> {
                       btPoints: _simulator.btPoints,
                       rorPoints: _simulator.rorPoints,
                       turningPointTime: _simulator.turningPointTime,
+                      stripDryingLine: _stripDryingLine,
+                      stripMaillardLine: _stripMaillardLine,
+                      stripPostCrackLine: _stripPostCrackLine,
                     ),
                     const SizedBox(height: 16),
                     Column(

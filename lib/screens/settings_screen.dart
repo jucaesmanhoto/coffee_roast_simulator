@@ -44,7 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _moistureController = TextEditingController(text: widget.initialCoffee.currentMoisture.toString());
 
     _batchSizeController = TextEditingController(text: widget.initialRoasterSettings.batchSizeGrams.toString());
-    _chargeTempController = TextEditingController(text: widget.initialRoasterSettings.chargeTemp.toString());
+    // _chargeTempController = TextEditingController(text: widget.initialRoasterSettings.chargeTemp.toString());
     _initialHeatController = TextEditingController(text: widget.initialRoasterSettings.initialHeat.toString());
     _initialAirflowController = TextEditingController(text: widget.initialRoasterSettings.initialAirflow.toString());
     _initialDrumSpeedController = TextEditingController(text: widget.initialRoasterSettings.initialDrumSpeed.toString());
@@ -81,7 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newRoasterSettings = RoasterSettings(
       model: _selectedRoaster,
       batchSizeGrams: double.tryParse(_batchSizeController.text) ?? 600.0,
-      chargeTemp: double.tryParse(_chargeTempController.text) ?? 206.0,
+      // chargeTemp: double.tryParse(_chargeTempController.text) ?? 206.0,
       initialHeat: double.tryParse(_initialHeatController.text) ?? 95.0,
       initialAirflow: double.tryParse(_initialAirflowController.text) ?? 25.0,
       initialDrumSpeed: double.tryParse(_initialDrumSpeedController.text) ?? 70.0,

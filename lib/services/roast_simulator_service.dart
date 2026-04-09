@@ -35,7 +35,7 @@ class Coffee {
 class RoasterSettings {
   final String model;
   final double batchSizeGrams;
-  final double chargeTemp;
+  // final double chargeTemp;
   final double initialHeat;
   final double initialAirflow;
   final double initialDrumSpeed;
@@ -54,11 +54,11 @@ class RoasterSettings {
   RoasterSettings({
     this.model = 'Kaleido M10',
     this.batchSizeGrams = 600.0,
-    this.chargeTemp = 208.0,
+    // this.chargeTemp = 195.0,
     this.initialHeat = 70.0,
     this.initialAirflow = 20.0,
     this.initialDrumSpeed = 70.0,
-    this.timeScale = 2.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
+    this.timeScale = 4.0, // 1.0 = tempo real, 10.0 = 10x mais rápido
     this.maxPowerWatts = 2600.0,
     this.drumMassKg = 2.0, // Estimativa para um torrador deste porte
     this.drumSpecificHeat = 0.5, // kJ/kg·K para Aço Inox 304
@@ -77,10 +77,10 @@ class RoastSimulatorService {
 
 
   // Parâmetros de Simulação
-  double beanTemp = 205.0; // Temperatura do grão (BT)
+  double beanTemp = 190.0; // Temperatura do grão (BT)
   double trueBeanCoreTemp = 20.0; // Temperatura interna REAL do grão
-  double drumTemp = 205.0; // Temperatura do tambor (ou ambiente interno)
-  double airTemp = 205.0; // Temperatura do ar dentro do torrador
+  double drumTemp = 190.0; // Temperatura do tambor (ou ambiente interno)
+  double airTemp = 190.0; // Temperatura do ar dentro do torrador
   static const double ambientTemp = 20.0; // Temperatura ambiente fixa
   double heatInput = 0.0;
   double airFlow = 20.0;
@@ -134,6 +134,45 @@ class RoastSimulatorService {
       return 0;
     }
     return (developmentTimeSeconds / roastSeconds) * 100;
+  }
+
+  /// Tempo na faixa de secagem (carga até ~150°C).
+  int get dryingPhaseDurationSeconds {
+    if (roastSeconds <= 0) {
+      return 0;
+    }
+    if (dryingPhaseEndTime == null) {
+      return roastSeconds;
+    }
+    return dryingPhaseEndTime!;
+  }
+
+  /// Tempo entre o fim da secagem (~150°C) e a marcação do 1º crack.
+  int get maillardBandDurationSeconds {
+    if (dryingPhaseEndTime == null) {
+      return 0;
+    }
+    if (firstCrackTime == null) {
+      return (roastSeconds - dryingPhaseEndTime!).clamp(0, roastSeconds);
+    }
+    final span = firstCrackTime! - dryingPhaseEndTime!;
+    return span < 0 ? 0 : span;
+  }
+
+  /// Tempo após marcação do 1º crack até o instante atual.
+  int get postFirstCrackDurationSeconds {
+    final t = firstCrackTime;
+    if (t == null || roastSeconds <= t) {
+      return 0;
+    }
+    return roastSeconds - t;
+  }
+
+  double percentOfTotalRoast(int segmentSeconds) {
+    if (roastSeconds <= 0) {
+      return 0;
+    }
+    return (segmentSeconds / roastSeconds) * 100;
   }
 
   void markFirstCrack() {
@@ -360,8 +399,10 @@ class RoastSimulatorService {
           roastPhase = RoastPhase.development;
         }
 
-        // Captura o momento em que a secagem termina
-        if (previousPhase == RoastPhase.drying && roastPhase == RoastPhase.maillard && dryingPhaseEndTime == null && beanTemp >= dryingToEndTemp) {
+        // Captura o momento em que a secagem termina.
+        // Exige que o TP já tenha sido detectado para evitar um falso disparo logo após a carga,
+        // quando a sonda (BT) ainda está quente do pré-aquecimento mas os grãos ainda estão frios.
+        if (previousPhase == RoastPhase.drying && roastPhase == RoastPhase.maillard && dryingPhaseEndTime == null && beanTemp >= dryingToEndTemp && turningPointDetected) {
           dryingPhaseEndTime = roastSeconds;
         }
 
